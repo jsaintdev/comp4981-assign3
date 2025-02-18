@@ -1,9 +1,6 @@
-#include "../include/display.h"
-#include <stdlib.h>
+int client(void);
 
-int main(void)
+int client(void)
 {
-    display("Hello, World");
-
-    return EXIT_SUCCESS;
+    return 0;
 }
