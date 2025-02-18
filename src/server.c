@@ -1,6 +1,7 @@
-int client(void);
+#include "server.h"
+#include "setup.h"
 
-int client(void)
+int main(void)
 {
     return 0;
 }

@@ -1,9 +1,5 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#define MAX_INPUT 1024
-#define CMD_NOT_FOUND 127
+#include "server.h"
+#include "setup.h"
 
 int main(void)
 {

@@ -1,1 +1,2 @@
-main src/server.c src/client.c
+server src/server.c src/server.c
+client src/client.c src/server.c
