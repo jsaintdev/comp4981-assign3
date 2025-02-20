@@ -1,20 +1,39 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <netinet/in.h>
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <p101_convert/integer.h>
 #include <p101_fsm/fsm.h>
 #include <p101_posix/p101_string.h>
 #include <p101_unix/p101_getopt.h>
-#include <netinet/in.h>
-#include <sys/types.h>
-#include <sys/wait.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <signal.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
+
+#define MAX_CLIENTS 10
+#define MAX_MSG_LENGTH 256
+
+typedef struct
+{
+    int                client_socket;
+    struct sockaddr_in client_address;
+    char               msg[MAX_MSG_LENGTH];
+    pid_t              process_id;
+} client_info;
+
+typedef struct
+{
+    int         server_socket;
+    client_info clients[MAX_CLIENTS];
+    fd_set      active_fds;
+    int         max_fd;
+} server_data;
 
 enum application_states
 {
@@ -32,10 +51,10 @@ enum application_states
     ERROR
 };
 
-static void           start_listening(int server_fd, int backlog);
-static int            socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
-static void           shutdown_socket(int sockfd, int how);
-static void           socket_close(int sockfd);
+static void start_listening(int server_fd, int backlog);
+static int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
+static void shutdown_socket(int sockfd, int how);
+static void socket_close(int sockfd);
 
 static p101_fsm_state_t setup_server(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
@@ -50,4 +69,4 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
 static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
 
-#endif //SERVER_H
+#endif    // SERVER_H

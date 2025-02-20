@@ -1,11 +1,28 @@
-#include "server.h"
+#include "client.h"
 #include "setup.h"
 
-int main(void)
+int main(int argc, char *argv[])
 {
     char input[MAX_INPUT];    // Buffer to store user input
     int  status = 0;          // Variable to store the last
     // "exit status"
+
+    char                   *address;
+    char                   *port_str;
+    in_port_t               port;
+    int                     sockfd;
+    struct sockaddr_storage addr;
+
+    address  = NULL;
+    port_str = NULL;
+
+    // Set up network socket
+    parse_arguments(argc, argv, &address, &port_str);
+    handle_arguments(argv[0], address, port_str, &port);
+    convert_address(address, &addr);
+    sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
+    socket_connect(sockfd, &addr, port);
+
     while(1)
     {
         size_t len;

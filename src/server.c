@@ -7,18 +7,19 @@ int main(int argc, char *argv[])
         {P101_FSM_INIT,    SETUP,            setup_server      },
         {SETUP,            WAIT_FOR_CMD,     wait_for_command  },
         {WAIT_FOR_CMD,     RECEIVE_CMD,      receive_command   },
+        {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
         {RECEIVE_CMD,      PARSE_CMD,        parse_command     },
         {PARSE_CMD,        CHECK_CMD_TYPE,   check_command_type},
         {CHECK_CMD_TYPE,   INVALID_CMD,      invalid_command   },
         {CHECK_CMD_TYPE,   EXECUTE_BUILT_IN, execute_built_in  },
         {CHECK_CMD_TYPE,   SEARCH_FOR_CMD,   search_for_command},
+        {CHECK_CMD_TYPE,   CLEANUP,          cleanup           },
         {SEARCH_FOR_CMD,   EXECUTE_CMD,      execute_command   },
         {INVALID_CMD,      SEND_OUTPUT,      send_output       },
         {EXECUTE_BUILT_IN, SEND_OUTPUT,      send_output       },
         {EXECUTE_CMD,      SEND_OUTPUT,      send_output       },
         {SEND_OUTPUT,      WAIT_FOR_CMD,     wait_for_command  },
         {SETUP,            ERROR,            state_error       },
-        {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
         {WAIT_FOR_CMD,     ERROR,            state_error       },
         {RECEIVE_CMD,      ERROR,            state_error       },
         {PARSE_CMD,        ERROR,            state_error       },
@@ -76,7 +77,7 @@ int main(int argc, char *argv[])
         exit_code = EXIT_FAILURE;
         goto done;
     }
-    fsm_env   = p101_env_create(error, true, NULL);
+    fsm_env = p101_env_create(error, true, NULL);
     if(p101_error_has_error(fsm_error))
     {
         exit_code = EXIT_FAILURE;
@@ -84,11 +85,10 @@ int main(int argc, char *argv[])
     }
 
     fsm = p101_fsm_info_create(env, error, "application-fsm", fsm_env, fsm_error, NULL);
-        p101_fsm_run(fsm, &from_state, &to_state, &context, transitions, sizeof(transitions));
+    p101_fsm_run(fsm, &from_state, &to_state, &context, transitions, sizeof(transitions));
     p101_fsm_info_destroy(env, &fsm);
 
     // Set up Signal Handler
-
 
     // Server Loop
     //    while(!(exit_flag))
@@ -143,7 +143,6 @@ int main(int argc, char *argv[])
     //    shutdown_socket(sockfd, SHUT_RDWR);
     //    socket_close(sockfd);
 
-
     free(fsm_env);
 
 free_fsm_error:
@@ -161,6 +160,9 @@ done:
     return exit_code;
 }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t setup_server(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
@@ -173,12 +175,22 @@ static p101_fsm_state_t setup_server(const struct p101_env *env, struct p101_err
     return WAIT_FOR_CMD;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
 
-    return RECEIVE_CMD;
+    return WAIT_FOR_CMD;
 }
+
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -187,12 +199,43 @@ static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_
     return PARSE_CMD;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    char c;
+    int  i = 0;
+    int  j = 0;
+
     P101_TRACE(env);
+
+    // Read the buffer
+    c = buffer[i];
+
+    // Copy chars from buffer to req_header until first space
+    while(c != ' ' && j < REQ_HEADER_LEN)
+    {
+        req_header[j++] = c;
+        c               = buffer[++i];
+    }
+
+    // Null-terminate req_header
+    req_header[j] = '\0';
+
+    // Debug: print the extracted request
+    printf("request path: %s\n", req_header);
+    printf("request path length: %d\n", (int)strlen(req_header));
 
     return CHECK_CMD_TYPE;
 }
+
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -200,12 +243,38 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
 
     P101_TRACE(env);
 
-    next_state = INVALID_CMD;
-    // next_state = EXECUTE_BUILT_IN;
-    // next_state = SEARCH_FOR_CMD;
+    if(strcmp(req_header, "exit") == 0)
+    {
+        next_state = CLEANUP;
+    }
+    else if(strcmp(req_header, "pwd") == 0)
+    {
+        next_state = EXECUTE_BUILT_IN;
+    }
+    else if(strcmp(req_header, "echo") == 0)
+    {
+        next_state = EXECUTE_BUILT_IN;
+    }
+    else if(strcmp(req_header, "cat") == 0)
+    {
+        next_state = SEARCH_FOR_CMD;
+    }
+    else if(strcmp(req_header, "ls") == 0)
+    {
+        next_state = SEARCH_FOR_CMD;
+    }
+    else
+    {
+        next_state = INVALID_CMD;
+    }
 
     return next_state;
 }
+
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -214,19 +283,40 @@ static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_
     return send_output;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
 
+    // exit
+    // pwd
+    // echo
     return send_output;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    // cat
+    // ls
+
     P101_TRACE(env);
 
     return execute_command;
 }
+
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -235,12 +325,22 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
     return send_output;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
 
     return wait_for_command;
 }
+
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
 {
@@ -249,11 +349,18 @@ static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_erro
     return cleanup;
 }
 
+#pragma GCC diagnostic pop
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
     return P101_FSM_EXIT;
 }
+
+#pragma GCC diagnostic pop
 
 static void start_listening(int server_fd, int backlog)
 {

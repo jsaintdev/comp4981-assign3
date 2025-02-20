@@ -1,2 +1,2 @@
-server src/server.c src/server.c
-client src/client.c src/server.c
+server src/server.c src/setup.c src/builtin.c include/server.h include/setup.h include/builtin.h
+client src/client.c src/setup.c include/client.h include/setup.h
