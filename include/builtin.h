@@ -11,8 +11,8 @@
 
 #define PATH_LEN 1024
 
-// exit
+void process_exit();
 void process_pwd();
-// echo
+void process_echo();
 
 #endif    // BUILTIN_H

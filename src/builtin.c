@@ -1,5 +1,10 @@
 #include "builtin.h"
 
+void process_exit()
+{
+    exit_flag = 1;
+}
+
 // Note: adapted from code found via Stack Overflow
 void process_pwd()
 {
@@ -64,4 +69,12 @@ void process_pwd()
 
         printf("%s\n, (*path) ? path : "/");
         // TO DO: return file path
+}
+
+void process_echo()
+{
+    // Set up copy variables
+    // Move cursor past echo and space
+    // Copy buffer data into copy variable
+    // return message
 }
