@@ -4,8 +4,7 @@
 int main(int argc, char *argv[])
 {
     static struct p101_fsm_transition transitions[] = {
-        {P101_FSM_INIT,    SETUP,            setup_server      },
-        {SETUP,            WAIT_FOR_CMD,     wait_for_command  },
+        {P101_FSM_INIT,    WAIT_FOR_CMD,     wait_for_command  },
         {WAIT_FOR_CMD,     RECEIVE_CMD,      receive_command   },
         {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
         {RECEIVE_CMD,      PARSE_CMD,        parse_command     },
@@ -19,7 +18,6 @@ int main(int argc, char *argv[])
         {EXECUTE_BUILT_IN, SEND_OUTPUT,      send_output       },
         {EXECUTE_CMD,      SEND_OUTPUT,      send_output       },
         {SEND_OUTPUT,      WAIT_FOR_CMD,     wait_for_command  },
-        {SETUP,            ERROR,            state_error       },
         {WAIT_FOR_CMD,     ERROR,            state_error       },
         {RECEIVE_CMD,      ERROR,            state_error       },
         {PARSE_CMD,        ERROR,            state_error       },
@@ -47,15 +45,23 @@ int main(int argc, char *argv[])
     int                     sockfd;
     struct sockaddr_storage addr;
     int                     exit_code;
+    server_data context;
 
     address  = NULL;
     port_str = NULL;
 
-    setup_signal_handler();
-
     // Start the server program
     parse_arguments(argc, argv, &address, &port_str);
     handle_arguments(argv[0], address, port_str, &port);
+
+    // Set up server
+    convert_address(address, &addr);
+    sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
+    socket_bind(sockfd, &addr, port);
+    start_listening(sockfd, SOMAXCONN);
+
+    // Set up signal handler
+        setup_signal_handler();
 
     // Set up FSM
     error = p101_error_create(false);
@@ -86,9 +92,25 @@ int main(int argc, char *argv[])
 
     fsm = p101_fsm_info_create(env, error, "application-fsm", fsm_env, fsm_error, NULL);
     p101_fsm_run(fsm, &from_state, &to_state, &context, transitions, sizeof(transitions));
-    p101_fsm_info_destroy(env, &fsm);
 
-    // Set up Signal Handler
+    // Cleanup
+    p101_fsm_info_destroy(env, &fsm);
+    free(fsm_env);
+
+free_fsm_error:
+    p101_error_reset(fsm_error);
+    p101_free(env, fsm_error);
+
+free_env:
+    p101_free(env, env);
+
+free_error:
+    p101_error_reset(error);
+    free(error);
+
+done:
+    return exit_code;
+}
 
     // Server Loop
     //    while(!(exit_flag))
@@ -142,40 +164,6 @@ int main(int argc, char *argv[])
     //    // Graceful Termination
     //    shutdown_socket(sockfd, SHUT_RDWR);
     //    socket_close(sockfd);
-
-    free(fsm_env);
-
-free_fsm_error:
-    p101_error_reset(fsm_error);
-    p101_free(env, fsm_error);
-
-free_env:
-    p101_free(env, env);
-
-free_error:
-    p101_error_reset(error);
-    free(error);
-
-done:
-    return exit_code;
-}
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
-static p101_fsm_state_t setup_server(const struct p101_env *env, struct p101_error *err, void *arg)
-{
-    P101_TRACE(env);
-
-    convert_address(address, &addr);
-    sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
-    socket_bind(sockfd, &addr, port);
-    start_listening(sockfd, SOMAXCONN);
-
-    return WAIT_FOR_CMD;
-}
-
-#pragma GCC diagnostic pop
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"

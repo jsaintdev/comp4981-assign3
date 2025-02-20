@@ -37,8 +37,7 @@ typedef struct
 
 enum application_states
 {
-    SETUP = P101_FSM_USER_START,
-    WAIT_FOR_CMD,
+    WAIT_FOR_CMD = P101_FSM_USER_START,
     RECEIVE_CMD,
     PARSE_CMD,
     CHECK_CMD_TYPE,
@@ -56,7 +55,6 @@ static int  socket_accept_connection(int server_fd, struct sockaddr_storage *cli
 static void shutdown_socket(int sockfd, int how);
 static void socket_close(int sockfd);
 
-static p101_fsm_state_t setup_server(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg);
