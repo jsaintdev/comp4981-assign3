@@ -11,5 +11,7 @@ static in_port_t      parse_in_port_t(const char *binary_name, const char *port_
 static void           convert_address(const char *address, struct sockaddr_storage *addr);
 static int            socket_create(int domain, int type, int protocol);
 static void           socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port);
+static void             setup_signal_handler(void);
+static void             sigint_handler(int signum);
 
 #endif //SETUP_H
