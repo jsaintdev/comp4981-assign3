@@ -1,4 +1,5 @@
 #include "server.h"
+#include "builtin.h"
 #include "setup.h"
 
 int main(int argc, char *argv[])
@@ -341,7 +342,7 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
         printf("Built-in command %s received\n", client->cmd);
         next_state = EXECUTE_BUILT_IN;
     }
-    else if(strcmp(req_header, "ls") == 0)
+    else if(strcmp(client->cmd, "ls") == 0)
     {
         printf("External command %s received\n", client->cmd);
         next_state = SEARCH_FOR_CMD;
@@ -362,9 +363,19 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
 
 static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
+
     P101_TRACE(env);
 
-    return send_output;
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    snprintf(client->output, MAX_MSG_LENGTH, "Error: Invalid command '%s'\n", client->cmd);
+
+    return SEND_OUTPUT;
 }
 
 #pragma GCC diagnostic pop
@@ -374,12 +385,37 @@ static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_
 
 static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
+
     P101_TRACE(env);
 
-    // exit
-    // pwd
-    // echo
-    return send_output;
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    // Clear output buffer
+    memset(client->output, 0, MAX_MSG_LENGTH);
+
+    if(strcmp(client->cmd, "cd") == 0)
+    {
+        process_cd(client);
+    }
+    else if(strcmp(client->cmd, "pwd") == 0)
+    {
+        process_pwd(client);
+    }
+    else if(strcmp(client->cmd, "echo") == 0)
+    {
+        process_echo(client);
+    }
+    else
+    {
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unrecognized built-in command '%s'\n", client->cmd);
+    }
+
+    return SEND_OUTPUT;
 }
 
 #pragma GCC diagnostic pop
@@ -389,12 +425,27 @@ static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101
 
 static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    // cat
-    // ls
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
 
     P101_TRACE(env);
 
-    return execute_command;
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    // Try to locate the command in the system's PATH
+    if(find_executable(client->cmd, command_path, sizeof(client->cmd_path)) != 0)
+    {
+        // Command not found, set error message
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Command '%s' not found\n", client->cmd);
+        return INVALID_CMD;
+    }
+
+    // Command found, store it and transition to execution
+    snprintf(client->output, MAX_MSG_LENGTH, "%s", command_path);
+    return EXECUTE_CMD;
 }
 
 #pragma GCC diagnostic pop
@@ -404,9 +455,106 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
 
 static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
+    int          pipe_fds[2];
+    pid_t        pid;
+    char         buffer[MAX_MSG_LENGTH];
+    ssize_t      bytes_read;
+    char        *argv[MAX_ARGS_LENGTH / 2 + 2];
+    int          argc;
+
     P101_TRACE(env);
 
-    return send_output;
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    if(client->cmd_path[0] == '\0')
+    {
+        perror("Executable not found");
+        snprint(client->output, MAX_MSG_LENGTH, "Error: Executable not found\n");
+        return SEND_OUTPUT;
+    }
+
+    // Create a pipe
+    if(pipe(pipe_fds) == -1)
+        ;
+    {
+        perror("Pipe creation failed");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to execute due to pipe creation failure\n");
+        return SEND_OUTPUT;
+    }
+
+    // Fork a new child process
+    pid = fork();
+    if(pid < 0)
+    {
+        perror("Fork failed");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to execute due to fork failure\n");
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        return SEND_OUTPUT;
+    }
+
+    // Child process
+    if(pid == 0)
+    {
+        // Close read end
+        close(pipe_fds[0]);
+
+        // Redirect stdout and stderr
+        dup2(pipe_fds[1], STDOUT_FILENO);
+        dup2(pipe_fds[1], STDERR_FILENO);
+
+        // Close write end
+        close(pipe_fds[1]);
+
+        // Prepare file path for execv
+        argc         = 0;
+        argv[argc++] = client->cmd_path;
+        char *arg    = strtok(client->args, " ");
+
+        while(arg && argc < MAX_ARGS_LENGTH / 2)
+        {
+            argv[argc++] = arg;
+            arg          = strtok(NULL, " ");
+        }
+        argv[argc] = NULL;
+
+        // Execute command
+        execv(argv[0], argv);
+
+        perror("Exec failed");
+        exit(EXIT_FAILURE);
+    }
+    else
+    {
+        // Parent
+        // Close write end
+        close(pipe_fds[1]);
+
+        // Prepare output from the child
+        memset(buffer, 0, MAX_MSG_LENGTH);
+        bytes_read = read(pipe_fds[0], buffer, MAX_MSG_LENGTH - 1);
+
+        close(pipe_fds[0]);
+
+        if(bytes_read > 0)
+        {
+            strncpy(client->output, buffer, MAX_MSG_LENGTH);
+        }
+        else
+        {
+            snprintf(client->output, MAX_MSG_LENGTH, "Error: no output from command\n");
+        }
+
+        // Wait for child to finish
+        waitpid(pid, NULL, 0);
+    }
+
+    return SEND_OUTPUT;
 }
 
 #pragma GCC diagnostic pop
@@ -449,7 +597,7 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
     }
 
     // Clear output buffer
-    memset(client->output, 0, MAX_MSG_LEN);
+    memset(client->output, 0, MAX_MSG_LENGTH);
 
     return WAIT_FOR_CMD;
 }
@@ -540,7 +688,35 @@ static void socket_close(int sockfd)
     }
 }
 
-static void process_exit()
+static void process_exit(void)
 {
     exit_flag = 1;
+}
+
+static int find_executable(const char *cmd, char *full_path, size_t size)
+{
+    char *path, *dir;
+    char  candidate[MAX_MSG_LENGTH];
+
+    // Get the system PATH
+    path = getenv("PATH");
+    if(!path)
+    {
+        return -1;
+    }
+
+    // Tokenize and search directories in PATH
+    dir = strtok(path, ":");
+    while(dir)
+    {
+        snprintf(candidate, sizeof(candidate), "%s/%s", dir, cmd);
+        if(access(candidate, X_OK) == 0)
+        {
+            strncpy(full_path, candidate, size);
+            return 0;    // Found
+        }
+        dir = strtok(NULL, ":");
+    }
+
+    return -1;    // Not found
 }

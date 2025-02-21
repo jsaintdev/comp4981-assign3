@@ -20,7 +20,8 @@ static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid
 #define MAX_CLIENTS 10
 #define MAX_MSG_LENGTH 256
 #define MAX_CMD_LENGTH 32
-#define MAX_ARGS_LENGTH 256
+#define MAX_ARGS_LENGTH 128
+#define MAX_PATH_LENGTH 256
 
 typedef struct
 {
@@ -30,6 +31,7 @@ typedef struct
     char               cmd[MAX_CMD_LENGTH];
     char               args[MAX_ARGS_LENGTH];
     char               output[MAX_MSG_LENGTH];
+    char               cmd_path[MAX_PATH_LENGTH];
     pid_t              process_id;
 } client_info;
 
@@ -60,7 +62,8 @@ static void start_listening(int server_fd, int backlog);
 static int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
 static void shutdown_socket(int sockfd, int how);
 static void socket_close(int sockfd);
-static void process_exit();
+static void process_exit(void);
+static int  find_executable(const char *cmd, char *full_path, size_t size);
 
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg);

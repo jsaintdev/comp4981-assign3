@@ -31,7 +31,7 @@ static void process_pwd(client_info *client)
     }
     else
     {
-        perror("Error retrieving current directory\n");
+        perror("Error retrieving current directory");
         snprintf(client->output, MAX_MSG_LENGTH, "Error using [pwd]: unable to retrieve current directory\n");
     }
 }

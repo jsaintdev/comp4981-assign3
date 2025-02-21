@@ -3,9 +3,9 @@
 
 int main(int argc, char *argv[])
 {
-    char input[MAX_INPUT];    // Buffer to store user input
+    char input[MAX_INPUT];      // Buffer to store user input
+    char response[MAX_INPUT0;	// Buffer for server response
     int  status = 0;          // Variable to store the last
-    // "exit status"
 
     char                   *address;
     char                   *port_str;
@@ -29,24 +29,22 @@ int main(int argc, char *argv[])
         // Display the shell prompt
         printf("shellkitty$ ");
         fflush(stdout);
+
         // Read input from the user
-        if(fgets(input, MAX_INPUT, stdin) == NULL)
+        len = read(STDIN_FILENO, input, MAX_INPUT - 1);
+        if(len <= 0)
         {
-            perror("fgets");
+            perror("Read error");
             break;
         }
+
         // Remove trailing newline character
-        len = strlen(input);
-        if(len > 0 && input[len - 1] == '\n')
+        if(input[len - 1] == '\n')
         {
             input[len - 1] = '\0';
+            len--;
         }
-        // Handle the "exit" command
-        if(strcmp(input, "exit") == 0)
-        {
-            printf("Exiting shell...\n");
-            break;
-        }
+
         // Substitute "$?" in the input with the last status
         for(char *p = input; (p = strstr(p, "$?"));)
         {
@@ -58,37 +56,37 @@ int main(int argc, char *argv[])
             snprintf(temp, sizeof(temp), "%.*s%d%s", (int)prefix_len, input, status, p + 2);
             strlcpy(input, temp, sizeof(input));
         }
-        // **Placeholder for Command Execution**
-        // At this point, the shell would parse the input and
-        // determine whether to execute an external command,
-        // a built-in command, or handle a syntax error.
-        // For example:
-        // - Tokenize the input into a command and arguments.
-        // - If it's a built-in, handle it directly
-        // (e.g., "cd", "echo").
-        // - Otherwise, attempt to execute it using system
-        // calls like fork() and exec().
-        // Code for these features could go here.
-        // Simulate an exit status for demonstration
 
-        if(strcmp(input, "simulate_success") == 0)
+        // **Send user input to server**
+        if(write(sockfd, input, len) == -1)
         {
-            status = 0;    // Success
-            printf("Simulating success: $? = %d\n", status);
+            perror("Error sending command to server");
+            break;
         }
-        else if(strcmp(input, "simulate_failure") == 0)
+
+        // **Receive and print the response from the server**
+        ssize_t bytes_read = read(sockfd, response, sizeof(response) - 1);
+
+        if(bytes_read <= 0)
         {
-            status = 1;    // Failure
-            printf("Simulating failure: $? = %d\n", status);
+            printf("Server disconnected. Exiting...\n");
+            break;
+        }
+
+        response[bytes_read] = '\0';    // Null-terminate response
+        printf("%s", response);
+
+        // Update status based on server response
+        if(strcmp(response, "Error: Command not found\n") == 0)
+        {
+            status = CMD_NOT_FOUND;
         }
         else
         {
-            // Default behaviour for unrecognized input
-            printf("Unrecognized input: \"%s\"\n", input);
-            status = CMD_NOT_FOUND;    // Indicate command not found
+            status = 0;    // Assume success if no error
         }
-        // Print the last status for debugging (optional)
-        // printf("Debug: Last status = %d\n", status);
     }
+
+    close(sockfd);
     return EXIT_SUCCESS;
 }
