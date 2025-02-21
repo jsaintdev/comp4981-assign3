@@ -428,6 +428,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
     server_data *server_state;
     int          client_index;
     client_info *client;
+    char         command_path[MAX_PATH_LENGTH];
 
     P101_TRACE(env);
 
@@ -436,7 +437,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
     client       = &server_state->clients[client_index];
 
     // Try to locate the command in the system's PATH
-    if(find_executable(client->cmd, command_path, sizeof(client->cmd_path)) != 0)
+    if(find_executable(client->cmd, command_path, sizeof(command_path)) != 0)
     {
         // Command not found, set error message
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Command '%s' not found\n", client->cmd);
@@ -444,7 +445,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
     }
 
     // Command found, store it and transition to execution
-    snprintf(client->output, MAX_MSG_LENGTH, "%s", command_path);
+    snprintf(client->cmd_path, MAX_MSG_LENGTH, "%s", command_path);
     return EXECUTE_CMD;
 }
 
@@ -474,13 +475,12 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
     if(client->cmd_path[0] == '\0')
     {
         perror("Executable not found");
-        snprint(client->output, MAX_MSG_LENGTH, "Error: Executable not found\n");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Executable not found\n");
         return SEND_OUTPUT;
     }
 
     // Create a pipe
     if(pipe(pipe_fds) == -1)
-        ;
     {
         perror("Pipe creation failed");
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to execute due to pipe creation failure\n");
@@ -514,7 +514,7 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
         // Prepare file path for execv
         argc         = 0;
         argv[argc++] = client->cmd_path;
-        char *arg    = strtok(client->args, " ");
+        arg          = strtok(client->args, " ");
 
         while(arg && argc < MAX_ARGS_LENGTH / 2)
         {
@@ -572,20 +572,21 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
     ssize_t      total_written;
 
     P101_TRACE(env);
-    printf("Sending output to client %d: %s\n", client->client_socket, client->output);
 
     server_state = (server_data *)arg;
     client_index = server_state->active_client;
     client       = &server_state->clients[client_index];
+
+    printf("Sending output to client %d: %s\n", client->client_socket, client->output);
 
     msg_length    = strlen(client->output);
     bytes_written = 0;
     total_written = 0;
 
     // Loop until the whole message is written
-    while(total_written < msg_length)
+    while(total_written < (ssize_t)msg_length)
     {
-        bytes_written = write(client->client_socket, client->output + total_written, msg_length - total_written);
+        bytes_written = write(client->client_socket, client->output + total_written, (size_t)(msg_length - (size_t)total_written));
 
         if(bytes_written == -1)
         {
@@ -611,7 +612,9 @@ static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_erro
 {
     P101_TRACE(env);
 
-    return cleanup;
+    printf("A critical server error occurred\n");
+
+    return CLEANUP;
 }
 
 #pragma GCC diagnostic pop
@@ -621,7 +624,35 @@ static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_erro
 
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    server_data *server_state;
+    int          i;
+
     P101_TRACE(env);
+
+    server_state = (server_data *)arg;
+
+    printf("Cleaning up server resources...\n");
+
+    // Close all active client sockets
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(server_state->clients[i].client_socket > 0)
+        {
+            close(server_state->clients[i].client_socket);
+            server_state->clients[i].client_socket = 0;
+        }
+    }
+
+    // Close the server socket
+    if(server_state->server_socket > 0)
+    {
+        shutdown_socket(server_state->server_socket, SHUT_RDWR);
+        socket_close(server_state->server_socket);
+        server_state->server_socket = 0;
+    }
+
+    printf("Cleanup complete. Server shutting down.\n");
+
     return P101_FSM_EXIT;
 }
 
