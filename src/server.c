@@ -5,9 +5,8 @@ int main(int argc, char *argv[])
 {
     static struct p101_fsm_transition transitions[] = {
         {P101_FSM_INIT,    WAIT_FOR_CMD,     wait_for_command  },
-        {WAIT_FOR_CMD,     RECEIVE_CMD,      receive_command   },
+        {WAIT_FOR_CMD,     PARSE_CMD,        parse_command     },
         {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
-        {RECEIVE_CMD,      PARSE_CMD,        parse_command     },
         {PARSE_CMD,        CHECK_CMD_TYPE,   check_command_type},
         {CHECK_CMD_TYPE,   INVALID_CMD,      invalid_command   },
         {CHECK_CMD_TYPE,   EXECUTE_BUILT_IN, execute_built_in  },
@@ -19,7 +18,6 @@ int main(int argc, char *argv[])
         {EXECUTE_CMD,      SEND_OUTPUT,      send_output       },
         {SEND_OUTPUT,      WAIT_FOR_CMD,     wait_for_command  },
         {WAIT_FOR_CMD,     ERROR,            state_error       },
-        {RECEIVE_CMD,      ERROR,            state_error       },
         {PARSE_CMD,        ERROR,            state_error       },
         {CHECK_CMD_TYPE,   ERROR,            state_error       },
         {SEARCH_FOR_CMD,   ERROR,            state_error       },
@@ -45,10 +43,11 @@ int main(int argc, char *argv[])
     int                     sockfd;
     struct sockaddr_storage addr;
     int                     exit_code;
-    server_data context;
+    server_data             server_state;
 
-    address  = NULL;
-    port_str = NULL;
+    address   = NULL;
+    port_str  = NULL;
+    exit_code = EXIT_SUCCESS;
 
     // Start the server program
     parse_arguments(argc, argv, &address, &port_str);
@@ -61,7 +60,7 @@ int main(int argc, char *argv[])
     start_listening(sockfd, SOMAXCONN);
 
     // Set up signal handler
-        setup_signal_handler();
+    setup_signal_handler();
 
     // Set up FSM
     error = p101_error_create(false);
@@ -81,17 +80,17 @@ int main(int argc, char *argv[])
     if(fsm_error == NULL)
     {
         exit_code = EXIT_FAILURE;
-        goto done;
+        goto free_env;
     }
     fsm_env = p101_env_create(error, true, NULL);
     if(p101_error_has_error(fsm_error))
     {
         exit_code = EXIT_FAILURE;
-        goto free_error;
+        goto free_fsm_error;
     }
 
     fsm = p101_fsm_info_create(env, error, "application-fsm", fsm_env, fsm_error, NULL);
-    p101_fsm_run(fsm, &from_state, &to_state, &context, transitions, sizeof(transitions));
+    p101_fsm_run(fsm, &from_state, &to_state, &server_state, transitions, sizeof(transitions));
 
     // Cleanup
     p101_fsm_info_destroy(env, &fsm);
@@ -112,65 +111,151 @@ done:
     return exit_code;
 }
 
-    // Server Loop
-    //    while(!(exit_flag))
-    //    {
-    //        int                     client_sockfd;
-    //        struct sockaddr_storage client_addr;
-    //        socklen_t               client_addr_len;
-    //        pid_t                   pid;
-    //
-    //        client_addr_len = sizeof(client_addr);
-    //        client_sockfd   = socket_accept_connection(sockfd, &client_addr, &client_addr_len);
-    //
-    //        if(client_sockfd == -1)
-    //        {
-    //            if(exit_flag)
-    //            {
-    //                break;
-    //            }
-    //            continue;
-    //        }
-    //
-    //        // Fork a new child process for each new connection
-    //        pid = fork();
-    //        if(pid == -1)
-    //        {
-    //            perror("Error creating child process");
-    //            close(client_sockfd);
-    //            continue;
-    //        }
-    //
-    //        if(pid == 0)
-    //        {
-    //            // Child Process
-    //            close(sockfd);
-    //
-    //            // Receive, process, and send data back
-    //
-    //            // Shut down child process
-    //            shutdown_socket(client_sockfd, SHUT_RDWR);
-    //            socket_close(client_sockfd);
-    //            exit(EXIT_SUCCESS);
-    //        }
-    //        else
-    //        {
-    //            // Parent Process
-    //            close(client_sockfd);
-    //            waitpid(-1, NULL, WNOHANG);
-    //        }
-    //    }
-    //
-    //    // Graceful Termination
-    //    shutdown_socket(sockfd, SHUT_RDWR);
-    //    socket_close(sockfd);
+// Server Loop
+//    while(!(exit_flag))
+//    {
+//        int                     client_sockfd;
+//        struct sockaddr_storage client_addr;
+//        socklen_t               client_addr_len;
+//        pid_t                   pid;
+//
+//        client_addr_len = sizeof(client_addr);
+//        client_sockfd   = socket_accept_connection(sockfd, &client_addr, &client_addr_len);
+//
+//        if(client_sockfd == -1)
+//        {
+//            if(exit_flag)
+//            {
+//                break;
+//            }
+//            continue;
+//        }
+//
+//        // Fork a new child process for each new connection
+//        pid = fork();
+//        if(pid == -1)
+//        {
+//            perror("Error creating child process");
+//            close(client_sockfd);
+//            continue;
+//        }
+//
+//        if(pid == 0)
+//        {
+//            // Child Process
+//            close(sockfd);
+//
+//            // Receive, process, and send data back
+//
+//            // Shut down child process
+//            shutdown_socket(client_sockfd, SHUT_RDWR);
+//            socket_close(client_sockfd);
+//            exit(EXIT_SUCCESS);
+//        }
+//        else
+//        {
+//            // Parent Process
+//            close(client_sockfd);
+//            waitpid(-1, NULL, WNOHANG);
+//        }
+//    }
+//
+//    // Graceful Termination
+//    shutdown_socket(sockfd, SHUT_RDWR);
+//    socket_close(sockfd);
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    struct sockaddr_in client_addr;
+    server_data       *server_state;
+    fd_set             read_fds;
+    socklen_t          client_len;
+    ssize_t            bytes_received;
+    int                activity;
+    int                new_socket;
+    int                client_socket;
+    int                i;
+    char               buffer[MAX_MSG_LENGTH];
+
     P101_TRACE(env);
+
+    server_state = (server_data *)arg;
+    read_fds     = server_state->active_fds;
+    client_len   = sizeof(client_addr);
+
+    printf("Server waiting for command...\n");
+
+    // Monitor sockets for activity
+    activity = select(server_state->max_fd + 1, &read_fds, NULL, NULL, NULL);
+
+    if(activity < 0 && errno != EINTR)
+    {
+        perror("Select error");
+        return ERROR;
+    }
+
+    // Check for new socket connection
+    if(FD_ISSET(server_state->server_socket, &read_fds))
+    {
+        new_socket = accept(server_state->server_socket, (struct sockaddr *)&client_addr, &client_len);
+        if(new_socket < 0)
+        {
+            perror("Accept error");
+            return ERROR;
+        }
+        printf("Accepted new client at socket %d\n", new_socket);
+
+        // Add new client to struct
+        for(i = 0; i < MAX_CLIENTS; i++)
+        {
+            if(server_state->clients[i].client_socket == 0)
+            {
+                server_state->clients[i].client_socket  = new_socket;
+                server_state->clients[i].client_address = client_addr;
+                memset(server_state->clients[i].msg, 0, MAX_MSG_LENGTH);
+                FD_SET(new_socket, &server_state->active_fds);
+                if(new_socket > server_state->max_fd)
+                {
+                    server_state->max_fd = new_socket;
+                }
+                break;
+            }
+        }
+    }
+
+    // Check for input from existing clients
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        client_socket = server_state->clients[i].client_socket;
+
+        if(client_socket > 0 && FD_ISSET(client_socket, &read_fds))
+        {
+            bytes_received = recv(client_socket, buffer, MAX_MSG_LENGTH - 1, 0);
+
+            if(bytes_received <= 0)
+            {
+                // Client disconnected
+                printf("Client %d disconnected\n", client_socket);
+                close(client_socket);
+                FD_CLR(client_socket, &server_state->active_fds);
+                server_state->clients[i].client_socket = 0;
+            }
+            else
+            {
+                // Process message
+                buffer[bytes_received] = '\0';
+                strncpy(server_state->clients[i].msg, buffer, MAX_MSG_LENGTH);
+
+                server_state->active_client = i;
+                printf("Received message from client %d: %s\n", client_socket, buffer);
+
+                return PARSE_CMD;
+            }
+        }
+    }
 
     return WAIT_FOR_CMD;
 }
@@ -180,42 +265,50 @@ static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg)
-{
-    P101_TRACE(env);
-
-    return PARSE_CMD;
-}
-
-#pragma GCC diagnostic pop
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
 static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    char c;
-    int  i = 0;
-    int  j = 0;
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
+    int          i, j, k;
 
     P101_TRACE(env);
 
-    // Read the buffer
-    c = buffer[i];
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
 
-    // Copy chars from buffer to req_header until first space
-    while(c != ' ' && j < REQ_HEADER_LEN)
+    i = 0;    // for original message
+    j = 0;    // for command buffer
+    k = 0;    // for argument buffer
+
+    // Extract the command
+    while(client->msg[i] != ' ' && client->msg[i] != '\0' && j < MAX_CMD_LENGTH - 1)
     {
-        req_header[j++] = c;
-        c               = buffer[++i];
+        client->cmd[j++] = client->msg[i++];
+    }
+    client->cmd[j] = '\0';
+
+    // Move past space(s) to get to the arguments
+    while(client->msg[i] == ' ')
+        i++;
+
+    // Extract any arguments
+    if(client->msg[i] != '\0')
+    {
+        while(client->msg[i] != '\0' && k < MAX_ARGS_LENGTH - 1)
+        {
+            client->args[k++] = client->msg[i++];
+        }
+        client->args[k] = '\0';
+    }
+    else
+    {
+        client->args[0] = '\0';
     }
 
-    // Null-terminate req_header
-    req_header[j] = '\0';
-
-    // Debug: print the extracted request
-    printf("request path: %s\n", req_header);
-    printf("request path length: %d\n", (int)strlen(req_header));
+    printf("Parsed command: %s\n", client->cmd);
+    printf("Parsed argument(s): %s\n", client->args);
 
     return CHECK_CMD_TYPE;
 }
@@ -227,32 +320,35 @@ static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_er
 
 static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
+    server_data     *server_state;
+    int              client_index;
+    client_info     *client;
     p101_fsm_state_t next_state;
 
     P101_TRACE(env);
 
-    if(strcmp(req_header, "exit") == 0)
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    if(strcmp(client->cmd, "exit") == 0)
     {
+        printf("Command exit received. Shutting down server...\n");
         next_state = CLEANUP;
     }
-    else if(strcmp(req_header, "pwd") == 0)
+    else if(strcmp(client->cmd, "cd") == 0 || strcmp(client->cmd, "pwd") == 0 || strcmp(client->cmd, "echo") == 0 || strcmp(client->cmd, "type") == 0)
     {
+        printf("Built-in command %s received\n", client->cmd);
         next_state = EXECUTE_BUILT_IN;
-    }
-    else if(strcmp(req_header, "echo") == 0)
-    {
-        next_state = EXECUTE_BUILT_IN;
-    }
-    else if(strcmp(req_header, "cat") == 0)
-    {
-        next_state = SEARCH_FOR_CMD;
     }
     else if(strcmp(req_header, "ls") == 0)
     {
+        printf("External command %s received\n", client->cmd);
         next_state = SEARCH_FOR_CMD;
     }
     else
     {
+        printf("Invald command %s received\n", client->cmd);
         next_state = INVALID_CMD;
     }
 
@@ -409,4 +505,9 @@ static void socket_close(int sockfd)
         perror("Error closing socket");
         exit(EXIT_FAILURE);
     }
+}
+
+static void process_exit()
+{
+    exit_flag = 1;
 }

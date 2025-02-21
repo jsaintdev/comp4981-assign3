@@ -11,6 +11,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -18,12 +19,16 @@ static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid
 
 #define MAX_CLIENTS 10
 #define MAX_MSG_LENGTH 256
+#define MAX_CMD_LENGTH 32
+#define MAX_ARGS_LENGTH 256
 
 typedef struct
 {
     int                client_socket;
     struct sockaddr_in client_address;
     char               msg[MAX_MSG_LENGTH];
+    char               cmd[MAX_CMD_LENGTH];
+    char               args[MAX_ARGS_LENGTH];
     pid_t              process_id;
 } client_info;
 
@@ -33,12 +38,12 @@ typedef struct
     client_info clients[MAX_CLIENTS];
     fd_set      active_fds;
     int         max_fd;
+    int         active_client;
 } server_data;
 
 enum application_states
 {
     WAIT_FOR_CMD = P101_FSM_USER_START,
-    RECEIVE_CMD,
     PARSE_CMD,
     CHECK_CMD_TYPE,
     INVALID_CMD,
@@ -54,6 +59,7 @@ static void start_listening(int server_fd, int backlog);
 static int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
 static void shutdown_socket(int sockfd, int how);
 static void socket_close(int sockfd);
+static void process_exit();
 
 static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
 static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg);
