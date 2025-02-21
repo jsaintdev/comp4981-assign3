@@ -416,9 +416,42 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
 
 static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    P101_TRACE(env);
+    server_data *server_state;
+    int          client_index;
+    client_info *client;
+    size_t       msg_length;
+    ssize_t      bytes_written;
+    ssize_t      total_written;
 
-    return wait_for_command;
+    P101_TRACE(env);
+    printf("Sending output to client %d: %s\n", client->client_socket, client->output);
+
+    server_state = (server_data *)arg;
+    client_index = server_state->active_client;
+    client       = &server_state->clients[client_index];
+
+    msg_length    = strlen(client->output);
+    bytes_written = 0;
+    total_written = 0;
+
+    // Loop until the whole message is written
+    while(total_written < msg_length)
+    {
+        bytes_written = write(client->client_socket, client->output + total_written, msg_length - total_written);
+
+        if(bytes_written == -1)
+        {
+            perror("Error sending output to client\n");
+            return ERROR;
+        }
+
+        total_written += bytes_written;
+    }
+
+    // Clear output buffer
+    memset(client->output, 0, MAX_MSG_LEN);
+
+    return WAIT_FOR_CMD;
 }
 
 #pragma GCC diagnostic pop

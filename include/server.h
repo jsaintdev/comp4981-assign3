@@ -29,6 +29,7 @@ typedef struct
     char               msg[MAX_MSG_LENGTH];
     char               cmd[MAX_CMD_LENGTH];
     char               args[MAX_ARGS_LENGTH];
+    char               output[MAX_MSG_LENGTH];
     pid_t              process_id;
 } client_info;
 

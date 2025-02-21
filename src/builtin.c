@@ -1,80 +1,54 @@
 #include "builtin.h"
 
-void process_exit()
+static void process_cd(client_info *client)
 {
-    exit_flag = 1;
-}
+    const char *path = client->args;
 
-// Note: adapted from code found via Stack Overflow
-void process_pwd()
-{
-    char           path[PATH_LEN] = "";
-    struct stat    statbuf, parent_statbuf;
-    DIR           *dir;
-    struct dirent *entry;
-
-    while(1)
+    // Default set to home
+    if(path == NULL || *path == '\0')
     {
-        // Get the inode and device of the current directory
-        if(lstat(".", &statbuf) == -1)
-        {
-            perror("lstat(.)");
-            return;
-        }
-
-        // Open the parent directory
-        if(chdir("..") == -1)
-        {
-            perror("chdir(..)");
-            return;
-        }
-
-        if(lstat(".", &parent_statbuf) == -1)
-        {
-            perror("lstat(..)");
-            return;
-        }
-
-        // Check if we are at the root
-        if(statbuf.st_ino == parent_statbut.st_into && statbuf.st_dev == parent_statbuf.st_dev)
-        {
-            break;
-        }
-
-        // Open the parent directory and find the directory name
-        dir = opendir(".");
-        if(!dir)
-        {
-            perror("opendir");
-            return;
-        }
-
-        while((entry = readdir(dir)) != NULL)
-        {
-            struct stat entry_stat;
-            if(lstat(entry->d_name, &entry_stat) == -1)
-                continue;
-
-            if(entry_stat.st_ino == statbuf.st_ino && entry_stat.st_dev == statbuf.st_dev)
-            {
-                char temp[PATH_LEN];
-                snprintf(temp, sizeof(temp), "%s%s", entry->d_name, path);
-                strncpy(path, temp, sizeof(path));
-                break;
-            }
-        }
-
-        closedir(dir);
+        path = getenv("HOME");
     }
 
-        printf("%s\n, (*path) ? path : "/");
-        // TO DO: return file path
+    // Execute chdir
+    if(chdir(path) != 0)
+    {
+        perror("No such file or directory");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error using [cd]: No such file or directory\n");
+        return;
+    }
+
+    // Success message
+    printf("Changing directory\n");
+    snprintf(client->output, MAX_MSG_LENGTH, "Changed directory to %s\n", path);
 }
 
-void process_echo()
+static void process_pwd(client_info *client)
 {
-    // Set up copy variables
-    // Move cursor past echo and space
-    // Copy buffer data into copy variable
-    // return message
+    if(getcwd(client->output, MAX_MSG_LENGTH) != NULL)
+    {
+        snprintf(client->output + strlen(client->output), MAX_MSG_LENGTH - strlen(client->output), "\n");
+    }
+    else
+    {
+        perror("Error retrieving current directory\n");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error using [pwd]: unable to retrieve current directory\n");
+    }
 }
+
+void process_echo(client_info *client)
+{
+    if(client->args == NULL || *client->args == '\0')
+    {
+        snprintf(client->output, MAX_MSG_LENGTH, "Error using [echo]: No message provided\n");
+    }
+    else
+    {
+        snprintf(client->output, MAX_MSG_LENGTH, "%s\n", client->args);
+    }
+}
+
+// static void process_type(client_info *client)
+//{
+//
+// }
