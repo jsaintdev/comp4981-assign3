@@ -186,12 +186,9 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     server_state = (server_data *)arg;
     client_len   = sizeof(client_addr);
 
-    printf("[DEBUG] Server waiting for command...\n");
-
     // **Reset FD_SET and add server socket**
     FD_ZERO(&read_fds);
     FD_SET(server_state->server_socket, &read_fds);
-    printf("[DEBUG] Added server socket FD %d to FD_SET\n", server_state->server_socket);
 
     // **Calculate max file descriptor (nfds)**
     nfds = server_state->server_socket;
@@ -210,9 +207,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     timeout.tv_sec  = TIMEOUT;
     timeout.tv_usec = 0;
 
-    printf("[DEBUG] Waiting on select() for server socket: %d\n", server_state->server_socket);
     activity = select(nfds, &read_fds, NULL, NULL, &timeout);
-    printf("[DEBUG] select() returned: %d, errno: %d (%s)\n", activity, errno, strerror(errno));
 
     if(activity < 0 && errno != EINTR)
     {
@@ -221,7 +216,6 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     }
     if(activity == 0)
     {
-        printf("[DEBUG] Select timed out, retrying...\n");
         fflush(stdout);
         return WAIT_FOR_CMD;
     }
@@ -232,10 +226,9 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
         int new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
         if(new_socket < 0)
         {
-            perror("[ERROR] Accept error");
+            perror("Accept error");
             return ERROR;
         }
-        printf("[DEBUG] Accepted new client at socket %d\n", new_socket);
 
         for(i = 0; i < MAX_CLIENTS; i++)
         {
@@ -276,7 +269,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
 
             if(bytes_received == 0)
             {
-                printf("[DEBUG] Client %d disconnected\n", client_socket);
+                printf("Client %d disconnected\n", client_socket);
                 close(client_socket);
                 FD_CLR(client_socket, &read_fds);
                 server_state->clients[i].client_socket = 0;
@@ -286,13 +279,12 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
                 buffer[bytes_received] = '\0';
                 strncpy(server_state->clients[i].msg, buffer, MAX_MSG_LENGTH);
                 server_state->active_client = i;
-                printf("[DEBUG] Received message from client %d: %s\n", client_socket, buffer);
+                printf("Received message from client %d: %s\n", client_socket, buffer);
                 return PARSE_CMD;
             }
         }
     }
 
-    printf("[DEBUG] Server looped without receiving any messages\n");
     return WAIT_FOR_CMD;
 }
 

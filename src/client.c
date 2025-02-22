@@ -52,8 +52,6 @@ int main(int argc, char *argv[])
             len--;
         }
 
-        printf("[DEBUG] Sending command: '%s' (Length: %zd bytes)\n", input, len);
-
         // **Send user input to server**
 
         bytes_written = write(sockfd, input, (size_t)len);
@@ -62,7 +60,6 @@ int main(int argc, char *argv[])
             perror("Error sending command to server");
             break;
         }
-        printf("[DEBUG] Successfully sent %zd bytes to server.\n", bytes_written);
 
         // **Receive and print the response from the server**
         bytes_read = read(sockfd, response, sizeof(response) - 1);
