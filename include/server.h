@@ -20,6 +20,7 @@
 
 static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+#define TIMEOUT 10
 #define MAX_CLIENTS 10
 #define MAX_MSG_LENGTH 256
 #define MAX_CMD_LENGTH 32

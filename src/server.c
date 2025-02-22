@@ -6,6 +6,7 @@ int main(int argc, char *argv[])
 {
     static struct p101_fsm_transition transitions[] = {
         {P101_FSM_INIT,    WAIT_FOR_CMD,     wait_for_command  },
+        {WAIT_FOR_CMD,     WAIT_FOR_CMD,     wait_for_command  },
         {WAIT_FOR_CMD,     PARSE_CMD,        parse_command     },
         {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
         {PARSE_CMD,        CHECK_CMD_TYPE,   check_command_type},
@@ -56,7 +57,8 @@ int main(int argc, char *argv[])
 
     // Set up server
     convert_address(address, &addr);
-    sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
+    sockfd                     = socket_create(addr.ss_family, SOCK_STREAM, 0);
+    server_state.server_socket = sockfd;
     socket_bind(sockfd, &addr, port);
     start_listening(sockfd, SOMAXCONN);
 
@@ -171,95 +173,126 @@ done:
 p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     struct sockaddr_storage client_addr;
+    struct timeval          timeout;
     server_data            *server_state;
     fd_set                  read_fds;
     socklen_t               client_len;
     ssize_t                 bytes_received;
     int                     activity;
+    int                     nfds;
     int                     i;
 
     P101_TRACE(env);
-
     server_state = (server_data *)arg;
-    read_fds     = server_state->active_fds;
     client_len   = sizeof(client_addr);
 
-    printf("Server waiting for command...\n");
+    printf("[DEBUG] Server waiting for command...\n");
 
-    // Monitor sockets for activity
-    activity = select(server_state->max_fd + 1, &read_fds, NULL, NULL, NULL);
+    // **Reset FD_SET and add server socket**
+    FD_ZERO(&read_fds);
+    FD_SET(server_state->server_socket, &read_fds);
+    printf("[DEBUG] Added server socket FD %d to FD_SET\n", server_state->server_socket);
+
+    // **Calculate max file descriptor (nfds)**
+    nfds = server_state->server_socket;
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        int client_socket = server_state->clients[i].client_socket;
+        if(client_socket > 0)
+        {
+            FD_SET(client_socket, &read_fds);
+            nfds = (nfds > client_socket) ? nfds : client_socket;
+        }
+    }
+    nfds += 1;
+
+    // **Set timeout for select**
+    timeout.tv_sec  = TIMEOUT;
+    timeout.tv_usec = 0;
+
+    printf("[DEBUG] Waiting on select() for server socket: %d\n", server_state->server_socket);
+    activity = select(nfds, &read_fds, NULL, NULL, &timeout);
+    printf("[DEBUG] select() returned: %d, errno: %d (%s)\n", activity, errno, strerror(errno));
 
     if(activity < 0 && errno != EINTR)
     {
-        perror("Select error");
+        perror("[ERROR] Select error");
         return ERROR;
     }
+    if(activity == 0)
+    {
+        printf("[DEBUG] Select timed out, retrying...\n");
+        fflush(stdout);
+        return WAIT_FOR_CMD;
+    }
 
-    // Check for new socket connection
+    // **Check for new client connections**
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
-        int new_socket;
-        new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
+        int new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
         if(new_socket < 0)
         {
-            perror("Accept error");
+            perror("[ERROR] Accept error");
             return ERROR;
         }
-        printf("Accepted new client at socket %d\n", new_socket);
+        printf("[DEBUG] Accepted new client at socket %d\n", new_socket);
 
-        // Add new client to struct
         for(i = 0; i < MAX_CLIENTS; i++)
         {
             if(server_state->clients[i].client_socket == 0)
             {
                 server_state->clients[i].client_socket = new_socket;
-                memcpy(&server_state->clients[i].client_address, &client_addr, sizeof(client_addr));
                 memset(server_state->clients[i].msg, 0, MAX_MSG_LENGTH);
-                FD_SET(new_socket, &server_state->active_fds);
-                if(new_socket > server_state->max_fd)
-                {
-                    server_state->max_fd = new_socket;
-                }
                 break;
             }
         }
     }
 
-    // Check for input from existing clients
+    // **Check for input from existing clients**
     for(i = 0; i < MAX_CLIENTS; i++)
     {
-        int client_socket;
-
-        client_socket = server_state->clients[i].client_socket;
+        int client_socket = server_state->clients[i].client_socket;
 
         if(client_socket > 0 && FD_ISSET(client_socket, &read_fds))
         {
             char buffer[MAX_MSG_LENGTH];
 
-            bytes_received = recv(client_socket, buffer, MAX_MSG_LENGTH - 1, 0);
+            bytes_received = recv(client_socket, buffer, MAX_MSG_LENGTH - 1, MSG_DONTWAIT);
 
-            if(bytes_received <= 0)
+            if(bytes_received < 0 && errno != EWOULDBLOCK && errno == EAGAIN)
             {
-                // Client disconnected
-                printf("Client %d disconnected\n", client_socket);
+                printf("Waiting for data from client %d...\n", client_socket);
+                continue;
+            }
+
+            if(bytes_received < 0)
+            {
+                perror("[ERROR] recv() failed");
                 close(client_socket);
-                FD_CLR(client_socket, &server_state->active_fds);
+                FD_CLR(client_socket, &read_fds);
+                server_state->clients[i].client_socket = 0;
+                continue;
+            }
+
+            if(bytes_received == 0)
+            {
+                printf("[DEBUG] Client %d disconnected\n", client_socket);
+                close(client_socket);
+                FD_CLR(client_socket, &read_fds);
                 server_state->clients[i].client_socket = 0;
             }
             else
             {
-                // Process message
                 buffer[bytes_received] = '\0';
                 strncpy(server_state->clients[i].msg, buffer, MAX_MSG_LENGTH);
-
                 server_state->active_client = i;
-                printf("Received message from client %d: %s\n", client_socket, buffer);
-
+                printf("[DEBUG] Received message from client %d: %s\n", client_socket, buffer);
                 return PARSE_CMD;
             }
         }
     }
 
+    printf("[DEBUG] Server looped without receiving any messages\n");
     return WAIT_FOR_CMD;
 }
 
@@ -637,7 +670,9 @@ p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err,
     }
 
     // Clear output buffer
+    server_state->active_client = -1;
     memset(client->output, 0, MAX_MSG_LENGTH);
+    memset(client->msg, 0, MAX_MSG_LENGTH);
 
     return WAIT_FOR_CMD;
 }
@@ -722,7 +757,7 @@ int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr
     {
         if(errno != EINTR)
         {
-            perror("accept failed");
+            printf("accept() failed");
         }
 
         return -1;

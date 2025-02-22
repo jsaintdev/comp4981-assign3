@@ -5,7 +5,6 @@ int main(int argc, char *argv[])
 {
     char input[MAX_INPUT];       // Buffer to store user input
     char response[MAX_INPUT];    // Buffer for server response
-    int  status = 0;             // Variable to store the last
 
     char                   *address;
     char                   *port_str;
@@ -21,18 +20,26 @@ int main(int argc, char *argv[])
     handle_arguments(argv[0], address, port_str, &port);
     convert_address(address, &addr);
     sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
-    socket_connect(sockfd, &addr, port);
 
-    while(1)
+    printf("[DEBUG] Attempting to connect to server...\n");
+    socket_connect(sockfd, &addr, port);
+    printf("[DEBUG] Successfully connected to server.\n");
+
+    setup_signal_handler();
+
+    while(!(exit_flag))
     {
-        size_t len;
+        ssize_t len;
+        ssize_t bytes_read;
+        ssize_t bytes_written;
+
         // Display the shell prompt
         printf("shellkitty$ ");
         fflush(stdout);
 
         // Read input from the user
         len = read(STDIN_FILENO, input, MAX_INPUT - 1);
-        if(len <= 0)
+        if(len == 0)
         {
             perror("Read error");
             break;
@@ -45,46 +52,34 @@ int main(int argc, char *argv[])
             len--;
         }
 
-        // Substitute "$?" in the input with the last status
-        for(char *p = input; (p = strstr(p, "$?"));)
-        {
-            char   temp[MAX_INPUT];
-            size_t prefix_len;
-            snprintf(temp, sizeof(temp), "%d", status);
-            prefix_len = (size_t)(p - input);    // Text before "$?"
-
-            snprintf(temp, sizeof(temp), "%.*s%d%s", (int)prefix_len, input, status, p + 2);
-            strlcpy(input, temp, sizeof(input));
-        }
+        printf("[DEBUG] Sending command: '%s' (Length: %zd bytes)\n", input, len);
 
         // **Send user input to server**
-        if(write(sockfd, input, len) == -1)
+
+        bytes_written = write(sockfd, input, (size_t)len);
+        if(bytes_written == -1)
         {
             perror("Error sending command to server");
             break;
         }
+        printf("[DEBUG] Successfully sent %zd bytes to server.\n", bytes_written);
 
         // **Receive and print the response from the server**
-        ssize_t bytes_read = read(sockfd, response, sizeof(response) - 1);
+        bytes_read = read(sockfd, response, sizeof(response) - 1);
 
-        if(bytes_read <= 0)
+        if(bytes_read == 0)
         {
             printf("Server disconnected. Exiting...\n");
+            break;
+        }
+        if(bytes_read < 0)
+        {
+            printf("Read failed");
             break;
         }
 
         response[bytes_read] = '\0';    // Null-terminate response
         printf("%s", response);
-
-        // Update status based on server response
-        if(strcmp(response, "Error: Command not found\n") == 0)
-        {
-            status = CMD_NOT_FOUND;
-        }
-        else
-        {
-            status = 0;    // Assume success if no error
-        }
     }
 
     close(sockfd);
