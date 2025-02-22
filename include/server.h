@@ -1,6 +1,7 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <p101_c/p101_stdlib.h>

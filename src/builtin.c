@@ -8,6 +8,10 @@ void process_cd(client_info *client)
     if(path == NULL || *path == '\0')
     {
         path = getenv("HOME");
+        if(path == NULL)
+        {
+            path = "/";
+        }
     }
 
     // Execute chdir

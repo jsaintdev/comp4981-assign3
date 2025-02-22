@@ -176,10 +176,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     socklen_t               client_len;
     ssize_t                 bytes_received;
     int                     activity;
-    int                     new_socket;
-    int                     client_socket;
     int                     i;
-    char                    buffer[MAX_MSG_LENGTH];
 
     P101_TRACE(env);
 
@@ -201,6 +198,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     // Check for new socket connection
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
+        int new_socket;
         new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
         if(new_socket < 0)
         {
@@ -230,10 +228,14 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     // Check for input from existing clients
     for(i = 0; i < MAX_CLIENTS; i++)
     {
+        int client_socket;
+
         client_socket = server_state->clients[i].client_socket;
 
         if(client_socket > 0 && FD_ISSET(client_socket, &read_fds))
         {
+            char buffer[MAX_MSG_LENGTH];
+
             bytes_received = recv(client_socket, buffer, MAX_MSG_LENGTH - 1, 0);
 
             if(bytes_received <= 0)
@@ -271,7 +273,9 @@ p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *er
     server_data *server_state;
     int          client_index;
     client_info *client;
-    int          i, j, k;
+    int          i;
+    int          j;
+    int          k;
 
     P101_TRACE(env);
 
@@ -292,7 +296,9 @@ p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *er
 
     // Move past space(s) to get to the arguments
     while(client->msg[i] == ' ')
+    {
         i++;
+    }
 
     // Extract any arguments
     if(client->msg[i] != '\0')
@@ -321,10 +327,10 @@ p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *er
 
 p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    server_data     *server_state;
-    int              client_index;
-    client_info     *client;
-    p101_fsm_state_t next_state;
+    server_data       *server_state;
+    int                client_index;
+    const client_info *client;
+    p101_fsm_state_t   next_state;
 
     P101_TRACE(env);
 
@@ -465,10 +471,7 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
     client_info *client;
     int          pipe_fds[2];
     pid_t        pid;
-    char         buffer[MAX_MSG_LENGTH];
-    ssize_t      bytes_read;
-    char        *argv[MAX_ARGS_LENGTH / 2 + 2];
-    int          argc;
+    char        *saveptr;
 
     P101_TRACE(env);
 
@@ -484,7 +487,7 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
     }
 
     // Create a pipe
-    if(pipe(pipe_fds) == -1)
+    if(pipe2(pipe_fds, O_CLOEXEC) == -1)
     {
         perror("Pipe creation failed");
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to execute due to pipe creation failure\n");
@@ -505,6 +508,9 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
     // Child process
     if(pid == 0)
     {
+        char *argv[(MAX_ARGS_LENGTH / 2) + 2];
+        int   argc;
+
         // Close read end
         close(pipe_fds[0]);
 
@@ -518,12 +524,12 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
         // Prepare file path for execv
         argc         = 0;
         argv[argc++] = client->cmd_path;
-        arg          = strtok(client->args, " ");
+        arg          = strtok_r(client->args, " ", &saveptr);
 
         while(arg && argc < MAX_ARGS_LENGTH / 2)
         {
             argv[argc++] = (char *)arg;
-            arg          = strtok(NULL, " ");
+            arg          = strtok_r(NULL, " ", &saveptr);
         }
         argv[argc] = NULL;
 
@@ -535,7 +541,9 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
     }
     else
     {
-        // Parent
+        char    buffer[MAX_MSG_LENGTH];
+        ssize_t bytes_read;
+
         // Close write end
         close(pipe_fds[1]);
 
@@ -572,29 +580,56 @@ p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err,
     int          client_index;
     client_info *client;
     size_t       msg_length;
-    ssize_t      bytes_written;
     ssize_t      total_written;
 
     P101_TRACE(env);
 
     server_state = (server_data *)arg;
     client_index = server_state->active_client;
-    client       = &server_state->clients[client_index];
+
+    // Validate client index before accessing the array
+    if(client_index < 0 || client_index >= MAX_CLIENTS)
+    {
+        fprintf(stderr, "Invalid client index: %d\n", client_index);
+        return ERROR;
+    }
+
+    client = &server_state->clients[client_index];
 
     printf("Sending output to client %d: %s\n", client->client_socket, client->output);
 
     msg_length    = strlen(client->output);
-    bytes_written = 0;
     total_written = 0;
 
-    // Loop until the whole message is written
-    while(total_written < (ssize_t)msg_length)
+    // Loop until the entire message is written
+    while((size_t)total_written < msg_length)
     {
-        bytes_written = write(client->client_socket, client->output + total_written, (size_t)(msg_length - (size_t)total_written));
+        ssize_t bytes_written;
+
+        size_t bytes_to_write = msg_length - (size_t)total_written;
+        bytes_written         = write(client->client_socket, client->output + total_written, bytes_to_write);
 
         if(bytes_written == -1)
         {
-            perror("Error sending output to client\n");
+            if(errno == EINTR)
+            {
+                continue;
+            }
+
+            if(errno == EAGAIN)
+            {
+                // Non-blocking mode: try again later
+                fprintf(stderr, "Client socket %d is not ready for writing\n", client->client_socket);
+                return WAIT_FOR_CMD;
+            }
+            perror("Error sending output to client");
+            return ERROR;
+        }
+
+        if(bytes_written == 0)
+        {
+            // Client may have closed the connection
+            fprintf(stderr, "Client socket %d closed the connection\n", client->client_socket);
             return ERROR;
         }
 
@@ -730,8 +765,10 @@ void process_exit(void)
 
 int find_executable(const char *cmd, char *full_path, size_t size)
 {
-    char *path, *dir;
-    char  candidate[MAX_MSG_LENGTH];
+    char       *path;
+    const char *dir;
+    char        candidate[MAX_MSG_LENGTH];
+    char       *saveptr;
 
     // Get the system PATH
     path = getenv("PATH");
@@ -741,7 +778,7 @@ int find_executable(const char *cmd, char *full_path, size_t size)
     }
 
     // Tokenize and search directories in PATH
-    dir = strtok(path, ":");
+    dir = strtok_r(path, ":", &saveptr);
     while(dir)
     {
         snprintf(candidate, sizeof(candidate), "%s/%s", dir, cmd);
@@ -750,7 +787,7 @@ int find_executable(const char *cmd, char *full_path, size_t size)
             strncpy(full_path, candidate, size);
             return 0;    // Found
         }
-        dir = strtok(NULL, ":");
+        dir = strtok_r(NULL, ":", &saveptr);
     }
 
     return -1;    // Not found
