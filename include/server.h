@@ -1,12 +1,14 @@
 #ifndef SERVER_H
 #define SERVER_H
 
+#include <netdb.h>
 #include <netinet/in.h>
 #include <p101_c/p101_stdlib.h>
 #include <p101_c/p101_string.h>
 #include <p101_convert/integer.h>
 #include <p101_fsm/fsm.h>
 #include <p101_posix/p101_string.h>
+#include <p101_posix/p101_unistd.h>
 #include <p101_unix/p101_getopt.h>
 #include <signal.h>
 #include <stdio.h>
@@ -27,12 +29,12 @@ typedef struct
 {
     int                client_socket;
     struct sockaddr_in client_address;
-    char               msg[MAX_MSG_LENGTH];
+    pid_t              process_id;
     char               cmd[MAX_CMD_LENGTH];
     char               args[MAX_ARGS_LENGTH];
-    char               output[MAX_MSG_LENGTH];
     char               cmd_path[MAX_PATH_LENGTH];
-    pid_t              process_id;
+    char               msg[MAX_MSG_LENGTH];
+    char               output[MAX_MSG_LENGTH];
 } client_info;
 
 typedef struct
@@ -58,23 +60,24 @@ enum application_states
     ERROR
 };
 
-static void start_listening(int server_fd, int backlog);
-static int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
-static void shutdown_socket(int sockfd, int how);
-static void socket_close(int sockfd);
-static void process_exit(void);
-static int  find_executable(const char *cmd, char *full_path, size_t size);
+void start_listening(int server_fd, int backlog);
+int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
+void shutdown_socket(int sockfd, int how);
+void socket_close(int sockfd);
+void process_exit(void);
+int  find_executable(const char *cmd, char *full_path, size_t size);
+void setup_signal_handler(void);
+void sigint_handler(int signum);
 
-static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t receive_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg);
-static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg);
+p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
 
 #endif    // SERVER_H

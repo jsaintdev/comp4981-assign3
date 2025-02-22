@@ -99,10 +99,10 @@ int main(int argc, char *argv[])
 
 free_fsm_error:
     p101_error_reset(fsm_error);
-    p101_free(env, fsm_error);
+    free(fsm_error);
 
 free_env:
-    p101_free(env, env);
+    free(env);
 
 free_error:
     p101_error_reset(error);
@@ -168,18 +168,18 @@ done:
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
-    struct sockaddr_in client_addr;
-    server_data       *server_state;
-    fd_set             read_fds;
-    socklen_t          client_len;
-    ssize_t            bytes_received;
-    int                activity;
-    int                new_socket;
-    int                client_socket;
-    int                i;
-    char               buffer[MAX_MSG_LENGTH];
+    struct sockaddr_storage client_addr;
+    server_data            *server_state;
+    fd_set                  read_fds;
+    socklen_t               client_len;
+    ssize_t                 bytes_received;
+    int                     activity;
+    int                     new_socket;
+    int                     client_socket;
+    int                     i;
+    char                    buffer[MAX_MSG_LENGTH];
 
     P101_TRACE(env);
 
@@ -201,7 +201,7 @@ static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101
     // Check for new socket connection
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
-        new_socket = accept(server_state->server_socket, (struct sockaddr *)&client_addr, &client_len);
+        new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
         if(new_socket < 0)
         {
             perror("Accept error");
@@ -214,8 +214,8 @@ static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101
         {
             if(server_state->clients[i].client_socket == 0)
             {
-                server_state->clients[i].client_socket  = new_socket;
-                server_state->clients[i].client_address = client_addr;
+                server_state->clients[i].client_socket = new_socket;
+                memcpy(&server_state->clients[i].client_address, &client_addr, sizeof(client_addr));
                 memset(server_state->clients[i].msg, 0, MAX_MSG_LENGTH);
                 FD_SET(new_socket, &server_state->active_fds);
                 if(new_socket > server_state->max_fd)
@@ -266,7 +266,7 @@ static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -319,7 +319,7 @@ static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_er
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data     *server_state;
     int              client_index;
@@ -361,7 +361,7 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -373,7 +373,7 @@ static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_
     client_index = server_state->active_client;
     client       = &server_state->clients[client_index];
 
-    snprintf(client->output, MAX_MSG_LENGTH, "Error: Invalid command '%s'\n", client->cmd);
+    snprintf(client->output, MAX_MSG_LENGTH, "Error: Invalid command\n");
 
     return SEND_OUTPUT;
 }
@@ -383,7 +383,7 @@ static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -410,9 +410,13 @@ static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101
     {
         process_echo(client);
     }
+    else if(strcmp(client->cmd, "exit") == 0)
+    {
+        process_exit();
+    }
     else
     {
-        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unrecognized built-in command '%s'\n", client->cmd);
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unrecognized built-in command\n");
     }
 
     return SEND_OUTPUT;
@@ -423,7 +427,7 @@ static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -440,7 +444,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
     if(find_executable(client->cmd, command_path, sizeof(command_path)) != 0)
     {
         // Command not found, set error message
-        snprintf(client->output, MAX_MSG_LENGTH, "Error: Command '%s' not found\n", client->cmd);
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Command not found\n");
         return INVALID_CMD;
     }
 
@@ -454,7 +458,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -518,7 +522,7 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
 
         while(arg && argc < MAX_ARGS_LENGTH / 2)
         {
-            argv[argc++] = arg;
+            argv[argc++] = (char *)arg;
             arg          = strtok(NULL, " ");
         }
         argv[argc] = NULL;
@@ -562,7 +566,7 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -608,7 +612,7 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
 
@@ -622,7 +626,7 @@ static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
+p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          i;
@@ -658,7 +662,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 
 #pragma GCC diagnostic pop
 
-static void start_listening(int server_fd, int backlog)
+void start_listening(int server_fd, int backlog)
 {
     if(listen(server_fd, backlog) == -1)
     {
@@ -670,7 +674,7 @@ static void start_listening(int server_fd, int backlog)
     printf("Listening for incoming connections...\n");
 }
 
-static int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len)
+int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len)
 {
     int  client_fd;
     char client_host[NI_MAXHOST];
@@ -701,7 +705,7 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
     return client_fd;
 }
 
-static void shutdown_socket(int sockfd, int how)
+void shutdown_socket(int sockfd, int how)
 {
     if(shutdown(sockfd, how) == -1)
     {
@@ -710,7 +714,7 @@ static void shutdown_socket(int sockfd, int how)
     }
 }
 
-static void socket_close(int sockfd)
+void socket_close(int sockfd)
 {
     if(close(sockfd) == -1)
     {
@@ -719,12 +723,12 @@ static void socket_close(int sockfd)
     }
 }
 
-static void process_exit(void)
+void process_exit(void)
 {
     exit_flag = 1;
 }
 
-static int find_executable(const char *cmd, char *full_path, size_t size)
+int find_executable(const char *cmd, char *full_path, size_t size)
 {
     char *path, *dir;
     char  candidate[MAX_MSG_LENGTH];
@@ -751,3 +755,31 @@ static int find_executable(const char *cmd, char *full_path, size_t size)
 
     return -1;    // Not found
 }
+
+// Sets up a signal handler so the program can terminate gracefully
+void setup_signal_handler(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+#if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
+    sa.sa_handler = sigint_handler;
+#if defined(__clang__)
+    #pragma clang diagnostic pop
+#endif
+    sigaction(SIGINT, &sa, NULL);
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+// Handles a SIGINT signal by setting a flag to signal termination
+void sigint_handler(int signum)
+{
+    exit_flag = EXIT_CODE;
+    printf("SIGINT received. Exiting...\n");
+}
+
+#pragma GCC diagnostic pop

@@ -1,6 +1,6 @@
 #include "builtin.h"
 
-static void process_cd(client_info *client)
+void process_cd(client_info *client)
 {
     const char *path = client->args;
 
@@ -23,7 +23,7 @@ static void process_cd(client_info *client)
     snprintf(client->output, MAX_MSG_LENGTH, "Changed directory to %s\n", path);
 }
 
-static void process_pwd(client_info *client)
+void process_pwd(client_info *client)
 {
     if(getcwd(client->output, MAX_MSG_LENGTH) != NULL)
     {
@@ -38,7 +38,7 @@ static void process_pwd(client_info *client)
 
 void process_echo(client_info *client)
 {
-    if(client->args == NULL || *client->args == '\0')
+    if(*client->args == '\0')
     {
         snprintf(client->output, MAX_MSG_LENGTH, "Error using [echo]: No message provided\n");
     }

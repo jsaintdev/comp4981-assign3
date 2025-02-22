@@ -11,4 +11,7 @@
 
 static volatile sig_atomic_t exit_flag = 0;    // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
 
+static void setup_signal_handler(void);
+static void sigint_handler(int signum);
+
 #endif    // CLIENT_H

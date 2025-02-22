@@ -90,3 +90,31 @@ int main(int argc, char *argv[])
     close(sockfd);
     return EXIT_SUCCESS;
 }
+
+// Sets up a signal handler so the program can terminate gracefully
+static void setup_signal_handler(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+#if defined(__clang__)
+    #pragma clang diagnostic push
+    #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
+#endif
+    sa.sa_handler = sigint_handler;
+#if defined(__clang__)
+    #pragma clang diagnostic pop
+#endif
+    sigaction(SIGINT, &sa, NULL);
+}
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+
+// Handles a SIGINT signal by setting a flag to signal termination
+static void sigint_handler(int signum)
+{
+    exit_flag = EXIT_CODE;
+    printf("SIGINT received. Exiting...\n");
+}
+
+#pragma GCC diagnostic pop

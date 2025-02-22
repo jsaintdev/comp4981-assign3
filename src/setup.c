@@ -1,4 +1,6 @@
-_Noreturn static void usage(const char *program_name, int exit_code, const char *message)
+#include "setup.h"
+
+_Noreturn void usage(const char *program_name, int exit_code, const char *message)
 {
     if(message)
     {
@@ -11,7 +13,7 @@ _Noreturn static void usage(const char *program_name, int exit_code, const char 
     exit(exit_code);
 }
 
-static void parse_arguments(int argc, char *argv[], char **ip_address, char **port)
+void parse_arguments(int argc, char *argv[], char **ip_address, char **port)
 {
     int opt;
 
@@ -58,7 +60,7 @@ static void parse_arguments(int argc, char *argv[], char **ip_address, char **po
     *port       = argv[optind + 1];
 }
 
-static void handle_arguments(const char *binary_name, const char *ip_address, const char *port_str, in_port_t *port)
+void handle_arguments(const char *binary_name, const char *ip_address, const char *port_str, in_port_t *port)
 {
     if(ip_address == NULL)
     {
@@ -102,7 +104,7 @@ in_port_t parse_in_port_t(const char *binary_name, const char *str)
     return (in_port_t)parsed_value;
 }
 
-static void convert_address(const char *address, struct sockaddr_storage *addr)
+void convert_address(const char *address, struct sockaddr_storage *addr)
 {
     memset(addr, 0, sizeof(*addr));
 
@@ -121,7 +123,7 @@ static void convert_address(const char *address, struct sockaddr_storage *addr)
     }
 }
 
-static int socket_create(int domain, int type, int protocol)
+int socket_create(int domain, int type, int protocol)
 {
     int sockfd;
 
@@ -136,7 +138,7 @@ static int socket_create(int domain, int type, int protocol)
     return sockfd;
 }
 
-static void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port)
+void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port)
 {
     char      addr_str[INET6_ADDRSTRLEN];
     socklen_t addr_len;
@@ -186,31 +188,3 @@ static void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t por
 
     printf("Bound to socket: %s:%u\n", addr_str, port);
 }
-
-// Sets up a signal handler so the program can terminate gracefully
-static void setup_signal_handler(void)
-{
-    struct sigaction sa;
-    memset(&sa, 0, sizeof(sa));
-#if defined(__clang__)
-    #pragma clang diagnostic push
-    #pragma clang diagnostic ignored "-Wdisabled-macro-expansion"
-#endif
-    sa.sa_handler = sigint_handler;
-#if defined(__clang__)
-    #pragma clang diagnostic pop
-#endif
-    sigaction(SIGINT, &sa, NULL);
-}
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-
-// Handles a SIGINT signal by setting a flag to signal termination
-static void sigint_handler(int signum)
-{
-    exit_flag = EXIT_CODE;
-    printf("SIGINT received. Exiting...\n");
-}
-
-#pragma GCC diagnostic pop
