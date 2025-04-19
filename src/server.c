@@ -463,6 +463,10 @@ static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101
     {
         process_type(client);
     }
+    else if(strcmp(client->cmd, "meow") == 0)
+    {
+        process_meow(client);
+    }
     else if(strcmp(client->cmd, "exit") == 0)
     {
         process_exit();
