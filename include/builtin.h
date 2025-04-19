@@ -14,7 +14,8 @@
 #include <unistd.h>
 
 #define PATH_LEN 1024
-#define BASE_FIVE 5
+#define NUM_BUILT_INS 6
+#define MAX_MEOWS 5
 #define MEANING_OF_LIFE 42
 
 void process_cd(client_info *client);

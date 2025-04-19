@@ -71,7 +71,7 @@ void process_type(client_info *client)
     }
 
     // Built-in commands
-    for(int i = 0; i < BASE_FIVE; i++)
+    for(int i = 0; i < NUM_BUILT_INS; i++)
     {
         if(strcmp(arg, builtins[i]) == 0)
         {
@@ -141,7 +141,7 @@ void process_meow(client_info *client)
         seeded = 1;
     }
 
-    while(count < BASE_FIVE)    // Up to 4 follow-ups (total 5 lines max)
+    while(count < MAX_MEOWS)    // Up to 4 follow-ups (total 5 lines max)
     {
         if(rand() % 2 == 0)
         {
