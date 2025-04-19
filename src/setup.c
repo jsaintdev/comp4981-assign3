@@ -1,6 +1,9 @@
 #include "setup.h"
 
-_Noreturn void usage(const char *program_name, int exit_code, const char *message)
+static _Noreturn void usage(const char *program_name, int exit_code, const char *message);
+static in_port_t      parse_in_port_t(const char *binary_name, const char *str);
+
+static _Noreturn void usage(const char *program_name, int exit_code, const char *message)
 {
     if(message)
     {
@@ -75,7 +78,7 @@ void handle_arguments(const char *binary_name, const char *ip_address, const cha
     *port = parse_in_port_t(binary_name, port_str);
 }
 
-in_port_t parse_in_port_t(const char *binary_name, const char *str)
+static in_port_t parse_in_port_t(const char *binary_name, const char *str)
 {
     char     *endptr;
     uintmax_t parsed_value;

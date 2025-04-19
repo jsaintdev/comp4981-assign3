@@ -2,6 +2,24 @@
 #include "builtin.h"
 #include "setup.h"
 
+static p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg);
+static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg);
+
+static void start_listening(int server_fd, int backlog);
+static int  socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len);
+static void shutdown_socket(int sockfd, int how);
+static void socket_close(int sockfd);
+static void process_exit(void);
+static int  find_executable(const char *cmd, char *full_path, size_t size);
+
 int main(int argc, char *argv[])
 {
     static struct p101_fsm_transition transitions[] = {
@@ -293,7 +311,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -350,7 +368,7 @@ p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *er
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data       *server_state;
     int                client_index;
@@ -392,7 +410,7 @@ p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -414,7 +432,7 @@ p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -458,7 +476,7 @@ p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -489,7 +507,7 @@ p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -599,7 +617,7 @@ p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          client_index;
@@ -674,7 +692,7 @@ p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
 
@@ -688,7 +706,7 @@ p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err,
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
+static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
     int          i;
@@ -724,7 +742,7 @@ p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, voi
 
 #pragma GCC diagnostic pop
 
-void start_listening(int server_fd, int backlog)
+static void start_listening(int server_fd, int backlog)
 {
     if(listen(server_fd, backlog) == -1)
     {
@@ -736,7 +754,7 @@ void start_listening(int server_fd, int backlog)
     printf("Listening for incoming connections...\n");
 }
 
-int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len)
+static int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len)
 {
     int  client_fd;
     char client_host[NI_MAXHOST];
@@ -767,7 +785,7 @@ int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr
     return client_fd;
 }
 
-void shutdown_socket(int sockfd, int how)
+static void shutdown_socket(int sockfd, int how)
 {
     if(shutdown(sockfd, how) == -1)
     {
@@ -776,7 +794,7 @@ void shutdown_socket(int sockfd, int how)
     }
 }
 
-void socket_close(int sockfd)
+static void socket_close(int sockfd)
 {
     if(close(sockfd) == -1)
     {
@@ -785,12 +803,12 @@ void socket_close(int sockfd)
     }
 }
 
-void process_exit(void)
+static void process_exit(void)
 {
     exit_flag = 1;
 }
 
-int find_executable(const char *cmd, char *full_path, size_t size)
+static int find_executable(const char *cmd, char *full_path, size_t size)
 {
     char       *path;
     const char *dir;
