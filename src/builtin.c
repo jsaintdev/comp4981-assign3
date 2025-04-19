@@ -23,7 +23,7 @@ void process_cd(client_info *client)
     }
 
     // Success message
-    printf("Changing directory\n");
+    // printf("Changing directory\n");
     snprintf(client->output, MAX_MSG_LENGTH, "Changed directory to %s\n", path);
 }
 

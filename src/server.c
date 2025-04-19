@@ -297,7 +297,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
                 buffer[bytes_received] = '\0';
                 strncpy(server_state->clients[i].msg, buffer, MAX_MSG_LENGTH);
                 server_state->active_client = i;
-                printf("Received message from client %d: %s\n", client_socket, buffer);
+                printf("[input] from client %d: %s\n", client_socket, buffer);
                 return PARSE_CMD;
             }
         }
@@ -357,8 +357,8 @@ static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_er
         client->args[0] = '\0';
     }
 
-    printf("Parsed command: %s\n", client->cmd);
-    printf("Parsed argument(s): %s\n", client->args);
+    // printf("Parsed command: %s\n", client->cmd);
+    // printf("Parsed argument(s): %s\n", client->args);
 
     return CHECK_CMD_TYPE;
 }
@@ -383,17 +383,17 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
 
     if(strcmp(client->cmd, "exit") == 0)
     {
-        printf("Command exit received. Shutting down server...\n");
+        printf("[exit] Shutting down server...\n");
         next_state = CLEANUP;
     }
     else if(strcmp(client->cmd, "cd") == 0 || strcmp(client->cmd, "pwd") == 0 || strcmp(client->cmd, "echo") == 0 || strcmp(client->cmd, "type") == 0 || strcmp(client->cmd, "meow") == 0)
     {
-        printf("Built-in command %s received\n", client->cmd);
+        printf("[type] %s is built-in\n", client->cmd);
         next_state = EXECUTE_BUILT_IN;
     }
     else
     {
-        printf("Searching for command %s...\n", client->cmd);
+        printf("[type] %s is external. Searching...\n", client->cmd);
         next_state = SEARCH_FOR_CMD;
     }
 
@@ -540,6 +540,13 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
         return SEND_OUTPUT;
     }
 
+    // For cat, check if there are args
+    if(client->args[0] == '\0' && strcmp(client->cmd, "cat") == 0)
+    {
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: 'cat' requires input or a filename\n");
+        return SEND_OUTPUT;
+    }
+
     // Fork a new child process
     pid = fork();
     if(pid < 0)
@@ -642,7 +649,7 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
 
     client = &server_state->clients[client_index];
 
-    printf("Sending output to client %d: %s\n", client->client_socket, client->output);
+    printf("[output] to client %d: %s\n", client->client_socket, client->output);
 
     msg_length    = strlen(client->output);
     total_written = 0;
@@ -778,7 +785,7 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
 
     if(getnameinfo((struct sockaddr *)client_addr, *client_addr_len, client_host, NI_MAXHOST, client_service, NI_MAXSERV, 0) == 0)
     {
-        printf("Accepted a new connection from %s:%s\n", client_host, client_service);
+        printf("Accepted a new connection from %s:%s\n\n", client_host, client_service);
     }
     else
     {
