@@ -75,7 +75,7 @@ void process_type(client_info *client)
     {
         if(strcmp(arg, builtins[i]) == 0)
         {
-            snprintf(client->output, MAX_MSG_LENGTH, "%s is a shell builtin\n", arg);
+            snprintf(client->output, MAX_MSG_LENGTH, "%s is a shellkitty builtin\n", arg);
             return;
         }
     }

@@ -28,11 +28,11 @@ int main(int argc, char *argv[])
         {WAIT_FOR_CMD,     PARSE_CMD,        parse_command     },
         {WAIT_FOR_CMD,     CLEANUP,          cleanup           },
         {PARSE_CMD,        CHECK_CMD_TYPE,   check_command_type},
-        {CHECK_CMD_TYPE,   INVALID_CMD,      invalid_command   },
         {CHECK_CMD_TYPE,   EXECUTE_BUILT_IN, execute_built_in  },
         {CHECK_CMD_TYPE,   SEARCH_FOR_CMD,   search_for_command},
         {CHECK_CMD_TYPE,   CLEANUP,          cleanup           },
         {SEARCH_FOR_CMD,   EXECUTE_CMD,      execute_command   },
+        {SEARCH_FOR_CMD,   INVALID_CMD,      invalid_command   },
         {INVALID_CMD,      SEND_OUTPUT,      send_output       },
         {EXECUTE_BUILT_IN, SEND_OUTPUT,      send_output       },
         {EXECUTE_CMD,      SEND_OUTPUT,      send_output       },
@@ -386,20 +386,15 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
         printf("Command exit received. Shutting down server...\n");
         next_state = CLEANUP;
     }
-    else if(strcmp(client->cmd, "cd") == 0 || strcmp(client->cmd, "pwd") == 0 || strcmp(client->cmd, "echo") == 0 || strcmp(client->cmd, "type") == 0)
+    else if(strcmp(client->cmd, "cd") == 0 || strcmp(client->cmd, "pwd") == 0 || strcmp(client->cmd, "echo") == 0 || strcmp(client->cmd, "type") == 0 || strcmp(client->cmd, "meow") == 0)
     {
         printf("Built-in command %s received\n", client->cmd);
         next_state = EXECUTE_BUILT_IN;
     }
-    else if(strcmp(client->cmd, "ls") == 0)
-    {
-        printf("External command %s received\n", client->cmd);
-        next_state = SEARCH_FOR_CMD;
-    }
     else
     {
-        printf("Invald command %s received\n", client->cmd);
-        next_state = INVALID_CMD;
+        printf("Searching for command %s...\n", client->cmd);
+        next_state = SEARCH_FOR_CMD;
     }
 
     return next_state;
@@ -818,31 +813,39 @@ static void process_exit(void)
 
 static int find_executable(const char *cmd, char *full_path, size_t size)
 {
-    char       *path;
+    const char *path;
     const char *dir;
     char        candidate[MAX_MSG_LENGTH];
     char       *saveptr;
+    char       *path_copy;
 
     // Get the system PATH
     path = getenv("PATH");
-    if(!path)
+    if(!path || *path == '\0')
     {
-        return -1;
+        path = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin";
     }
 
+    // Create modifiable copy
+    path_copy = strdup(path);
+
     // Tokenize and search directories in PATH
-    dir = strtok_r(path, ":", &saveptr);
-    while(dir)
+    dir = strtok_r(path_copy, ":", &saveptr);
+    while(dir != NULL)
     {
         snprintf(candidate, sizeof(candidate), "%s/%s", dir, cmd);
+
         if(access(candidate, X_OK) == 0)
         {
             strncpy(full_path, candidate, size);
-            return 0;    // Found
+            free(path_copy);
+            return 0;
         }
+
         dir = strtok_r(NULL, ":", &saveptr);
     }
 
+    free(path_copy);
     return -1;    // Not found
 }
 

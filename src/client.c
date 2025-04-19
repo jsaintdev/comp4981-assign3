@@ -21,9 +21,9 @@ int main(int argc, char *argv[])
     convert_address(address, &addr);
     sockfd = socket_create(addr.ss_family, SOCK_STREAM, 0);
 
-    printf("[DEBUG] Attempting to connect to server...\n");
+    // printf("[DEBUG] Attempting to connect to server...\n");
     socket_connect(sockfd, &addr, port);
-    printf("[DEBUG] Successfully connected to server.\n");
+    // printf("[DEBUG] Successfully connected to server.\n");
 
     setup_signal_handler();
 
@@ -57,6 +57,12 @@ int main(int argc, char *argv[])
             len--;
         }
 
+        // Ignore empty input
+        if(len == 0)
+        {
+            continue;
+        }
+
         // **Send user input to server**
 
         bytes_written = write(sockfd, input, (size_t)len);
@@ -81,7 +87,7 @@ int main(int argc, char *argv[])
         }
 
         response[bytes_read] = '\0';    // Null-terminate response
-        printf("%s", response);
+        printf("%s\n", response);
     }
 
     close(sockfd);
@@ -101,7 +107,7 @@ static void socket_connect(int sockfd, struct sockaddr_storage *addr, in_port_t 
         exit(EXIT_FAILURE);
     }
 
-    printf("Connecting to: %s:%u\n", addr_str, port);
+    // printf("Connecting to: %s:%u\n", addr_str, port);
     net_port = htons(port);
 
     if(addr->ss_family == AF_INET)
@@ -135,7 +141,7 @@ static void socket_connect(int sockfd, struct sockaddr_storage *addr, in_port_t 
         exit(EXIT_FAILURE);
     }
 
-    printf("Connected to: %s:%u\n", addr_str, port);
+    // printf("Connected to: %s:%u\n", addr_str, port);
 }
 
 // Sets up a signal handler so the program can terminate gracefully
