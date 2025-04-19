@@ -54,7 +54,14 @@ void process_echo(client_info *client)
 
 void process_type(client_info *client)
 {
-    const char *arg = client->args;
+    const char *path;
+    char       *path_copy;
+    const char *dir;
+    char       *saveptr;
+    const char *arg;
+    const char *builtins[] = {"cd", "pwd", "echo", "exit", "type", "meow"};
+
+    arg = client->args;
 
     // Check for missing argument
     if(arg == NULL || *arg == '\0')
@@ -64,8 +71,7 @@ void process_type(client_info *client)
     }
 
     // Built-in commands
-    const char *builtins[] = {"cd", "pwd", "echo", "exit", "type"};
-    for(int i = 0; i < 5; i++)
+    for(int i = 0; i < BASE_FIVE; i++)
     {
         if(strcmp(arg, builtins[i]) == 0)
         {
@@ -75,29 +81,36 @@ void process_type(client_info *client)
     }
 
     // Check if command is in PATH
-    char *path = getenv("PATH");
+    path = getenv("PATH");
     if(path == NULL)
     {
         snprintf(client->output, MAX_MSG_LENGTH, "Error: PATH not set\n");
         return;
     }
 
-    char *path_copy = strdup(path); // copy PATH since strtok modifies it
+    path_copy = strdup(path);    // copy PATH since strtok modifies it
     if(path_copy == NULL)
     {
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Memory allocation failed\n");
         return;
     }
 
-    char *saveptr;
-    char *dir = strtok_r(path_copy, ":", &saveptr);
+    dir = strtok_r(path_copy, ":", &saveptr);
     while(dir != NULL)
     {
         char full_path[PATH_LEN];
         snprintf(full_path, sizeof(full_path), "%s/%s", dir, arg);
         if(access(full_path, X_OK) == 0)
         {
-            snprintf(client->output, MAX_MSG_LENGTH, "%s is %s\n", arg, full_path);
+            // Clear buffer
+            client->output[0] = '\0';
+
+            // Append in chunks
+            strncat(client->output, arg, MAX_MSG_LENGTH - strlen(client->output) - 1);
+            strncat(client->output, " is ", MAX_MSG_LENGTH - strlen(client->output) - 1);
+            strncat(client->output, full_path, MAX_MSG_LENGTH - strlen(client->output) - 1);
+            strncat(client->output, "\n", MAX_MSG_LENGTH - strlen(client->output) - 1);
+
             free(path_copy);
             return;
         }
@@ -108,3 +121,46 @@ void process_type(client_info *client)
     free(path_copy);
 }
 
+void process_meow(client_info *client)
+{
+    // Output string buffer
+    char buffer[MAX_MSG_LENGTH] = "meow";
+    int  count                  = 1;
+
+    // Seed rand() once per session if needed
+    static int seeded = 0;
+    if(!seeded)
+    {
+        unsigned int seed;
+        if(getrandom(&seed, sizeof(seed), 0) != sizeof(seed))
+        {
+            seed = MEANING_OF_LIFE;
+        }
+        srand(seed);
+
+        seeded = 1;
+    }
+
+    while(count < BASE_FIVE)    // Up to 4 follow-ups (total 5 lines max)
+    {
+        if(rand() % 2 == 0)
+        {
+            strncat(buffer, " meow", MAX_MSG_LENGTH - strlen(buffer) - 1);
+        }
+        else
+        {
+            strncat(buffer, " purr", MAX_MSG_LENGTH - strlen(buffer) - 1);
+        }
+
+        // 50% chance to stop
+        if(rand() % 2 == 0)
+        {
+            break;
+        }
+
+        count++;
+    }
+
+    strncat(buffer, "\n", MAX_MSG_LENGTH - strlen(buffer) - 1);
+    snprintf(client->output, MAX_MSG_LENGTH, "%s", buffer);
+}

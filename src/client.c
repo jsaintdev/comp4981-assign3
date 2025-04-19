@@ -37,15 +37,20 @@ int main(int argc, char *argv[])
         printf("shellkitty$ ");
         fflush(stdout);
 
-        // Read input from the user
         len = read(STDIN_FILENO, input, MAX_INPUT - 1);
-        if(len == 0)
+        if(len <= 0)
         {
-            perror("Read error");
+            if(len < 0 && errno == EINTR)
+            {
+                // Interrupted by signal
+                continue;
+            }
+
+            perror("Read error or EOF");
             break;
         }
 
-        // Remove trailing newline character
+        // Remove trailing newline character safely
         if(input[len - 1] == '\n')
         {
             input[len - 1] = '\0';
