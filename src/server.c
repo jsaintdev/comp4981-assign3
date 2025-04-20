@@ -922,17 +922,14 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
         return -1;
     }
 
-    if(getnameinfo((struct sockaddr *)client_addr, *client_addr_len, client_host, NI_MAXHOST, client_service, NI_MAXSERV, 0) == 0)
+    if(getnameinfo((struct sockaddr *)client_addr, *client_addr_len, client_host, NI_MAXHOST, client_service, NI_MAXSERV, 0) != 0)
     {
-        printf("Accepted a new connection from %s:%s\n\n", client_host, client_service);
-    }
-    else
-    {
-        printf("Unable to get client information\n");
+        fprintf(stderr, "Unable to get client information\n");
         close(client_fd);
         return -1;
     }
 
+    printf("Accepted a new connection from %s:%s\n\n", client_host, client_service);
     return client_fd;
 }
 
