@@ -590,7 +590,6 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
 
     // Create a pipe
 #if defined(__linux__)
-    // Linux-specific: use pipe2 with O_CLOEXEC
     if(pipe2(pipe_fds, O_CLOEXEC) == -1)
     {
         perror("pipe2 failed");
@@ -598,8 +597,7 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
         return SEND_OUTPUT;
     }
 #else
-    // macOS and other POSIX systems
-    if(pipe(pipe_fds) == -1)
+    if(pipe(pipe_fds) == -1)    // NOLINT(android-cloexec-pipe)
     {
         perror("pipe failed");
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to create pipe\n");
