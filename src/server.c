@@ -161,10 +161,12 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     int                     activity;
     int                     nfds;
     int                     i;
+    int                     new_socket;
 
     P101_TRACE(env);
     server_state = (server_data *)arg;
     client_len   = sizeof(client_addr);
+    new_socket   = -1;
 
     // **Reset FD_SET and add server socket**
     FD_ZERO(&read_fds);
@@ -203,8 +205,6 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     // **Check for new client connections**
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
-        int new_socket;
-
         // Exit if exit_flag is set
         if(exit_flag)
         {
@@ -226,6 +226,12 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
                 memset(server_state->clients[i].msg, 0, MAX_MSG_LENGTH);
                 break;
             }
+        }
+
+        if(i == MAX_CLIENTS)
+        {
+            fprintf(stderr, "Max clients reached, rejecting new connection.\n");
+            close(new_socket);
         }
     }
 
@@ -273,6 +279,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
         }
     }
 
+    (void)new_socket;
     return WAIT_FOR_CMD;
 }
 
