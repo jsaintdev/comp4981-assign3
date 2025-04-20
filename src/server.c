@@ -132,62 +132,24 @@ done:
     return exit_code;
 }
 
-// Server Loop
-//    while(!(exit_flag))
-//    {
-//        int                     client_sockfd;
-//        struct sockaddr_storage client_addr;
-//        socklen_t               client_addr_len;
-//        pid_t                   pid;
-//
-//        client_addr_len = sizeof(client_addr);
-//        client_sockfd   = socket_accept_connection(sockfd, &client_addr, &client_addr_len);
-//
-//        if(client_sockfd == -1)
-//        {
-//            if(exit_flag)
-//            {
-//                break;
-//            }
-//            continue;
-//        }
-//
-//        // Fork a new child process for each new connection
-//        pid = fork();
-//        if(pid == -1)
-//        {
-//            perror("Error creating child process");
-//            close(client_sockfd);
-//            continue;
-//        }
-//
-//        if(pid == 0)
-//        {
-//            // Child Process
-//            close(sockfd);
-//
-//            // Receive, process, and send data back
-//
-//            // Shut down child process
-//            shutdown_socket(client_sockfd, SHUT_RDWR);
-//            socket_close(client_sockfd);
-//            exit(EXIT_SUCCESS);
-//        }
-//        else
-//        {
-//            // Parent Process
-//            close(client_sockfd);
-//            waitpid(-1, NULL, WNOHANG);
-//        }
-//    }
-//
-//    // Graceful Termination
-//    shutdown_socket(sockfd, SHUT_RDWR);
-//    socket_close(sockfd);
-
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Waits for input from connected clients or new connection attempts using select().
+    Accepts new connections or reads messages from active clients into their buffer.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    WAIT_FOR_CMD: Continue waiting for input
+    PARSE_CMD: A message was received and should be parsed
+    CLEANUP: Shutdown was requested
+    ERROR: A socket or select error occurred
+*/
 p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     struct sockaddr_storage client_addr;
@@ -319,6 +281,17 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Parses a client's message into a command and its arguments.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    CHECK_CMD_TYPE: Command successfully parsed
+*/
 static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -376,6 +349,19 @@ static p101_fsm_state_t parse_command(const struct p101_env *env, struct p101_er
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Determines the type of command received and selects the next state.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    CLEANUP: If "exit" command is received
+    EXECUTE_BUILT_IN: If the command is a recognized built-in
+    SEARCH_FOR_CMD: If the command may be external
+*/
 static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data       *server_state;
@@ -413,6 +399,17 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Handles an unrecognized command by setting an error message for the client.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    SEND_OUTPUT: Transition to send the error message to the client
+*/
 static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -435,6 +432,17 @@ static p101_fsm_state_t invalid_command(const struct p101_env *env, struct p101_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Executes a built-in command like cd, pwd, echo, type, or meow.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    SEND_OUTPUT: Transition to send the result to the client
+*/
 static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -487,6 +495,18 @@ static p101_fsm_state_t execute_built_in(const struct p101_env *env, struct p101
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Searches for an external command in the system's PATH and sets the full path.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    EXECUTE_CMD: If the command is found
+    INVALID_CMD: If the command is not found
+*/
 static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -519,6 +539,17 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Executes an external command and captures its output via a pipe.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    SEND_OUTPUT: After execution, with output or error message
+*/
 static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -636,6 +667,18 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Sends the generated output back to the active client.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    WAIT_FOR_CMD: After successfully sending the response
+    ERROR: If an error occurs during transmission
+*/
 static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -711,6 +754,17 @@ static p101_fsm_state_t send_output(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Handles critical errors during FSM execution and transitions to cleanup.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    CLEANUP: Always transitions to cleanup after reporting an error
+*/
 static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     P101_TRACE(env);
@@ -725,6 +779,17 @@ static p101_fsm_state_t state_error(const struct p101_env *env, struct p101_erro
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
+/*
+    Releases resources and closes all client and server sockets before shutdown.
+
+    @param
+    env: The program context
+    err: Used for error reporting
+    arg: The program configuration details
+
+    @return
+    P101_FSM_EXIT: Indicates the server is shutting down
+*/
 static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *err, void *arg)
 {
     server_data *server_state;
@@ -761,6 +826,13 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 
 #pragma GCC diagnostic pop
 
+/*
+    Starts listening for incoming connections on the specified socket.
+
+    @param
+    server_fd: The server socket file descriptor
+    backlog: The maximum length of the pending connections queue
+*/
 static void start_listening(int server_fd, int backlog)
 {
     if(listen(server_fd, backlog) == -1)
@@ -773,6 +845,17 @@ static void start_listening(int server_fd, int backlog)
     printf("Listening for incoming connections...\n");
 }
 
+/*
+    Accepts an incoming connection on the server socket and retrieves client information.
+
+    @param
+    server_fd: The server socket file descriptor
+    client_addr: Pointer to a sockaddr_storage struct to store client address info
+    client_addr_len: Pointer to a variable containing the size of client_addr
+
+    @return
+    A new socket file descriptor for the client, or -1 on failure
+*/
 static int socket_accept_connection(int server_fd, struct sockaddr_storage *client_addr, socklen_t *client_addr_len)
 {
     int  client_fd;
@@ -804,6 +887,13 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
     return client_fd;
 }
 
+/*
+    Shuts down the specified socket for reading, writing, or both.
+
+    @param
+    sockfd: The socket file descriptor
+    how: Specifies how to shut down (e.g., SHUT_RD, SHUT_WR, SHUT_RDWR)
+*/
 static void shutdown_socket(int sockfd, int how)
 {
     if(shutdown(sockfd, how) == -1)
@@ -813,6 +903,12 @@ static void shutdown_socket(int sockfd, int how)
     }
 }
 
+/*
+    Closes the specified socket and exits on failure.
+
+    @param
+    sockfd: The socket file descriptor to close
+*/
 static void socket_close(int sockfd)
 {
     if(close(sockfd) == -1)
@@ -822,11 +918,25 @@ static void socket_close(int sockfd)
     }
 }
 
+/*
+    Signals the server to begin shutdown by setting the global exit_flag.
+*/
 static void process_exit(void)
 {
     exit_flag = 1;
 }
 
+/*
+    Searches for an executable command in the system's PATH.
+
+    @param
+    cmd: Name of the command to search for
+    full_path: Buffer to store the resolved full path
+    size: Size of the full_path buffer
+
+    @return
+    0 if the executable is found, -1 otherwise
+*/
 static int find_executable(const char *cmd, char *full_path, size_t size)
 {
     const char *path;
@@ -884,7 +994,12 @@ void setup_signal_handler(void)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-// Handles a SIGINT signal by setting a flag to signal termination
+/*
+    Sets up a signal handler for SIGINT to allow graceful termination.
+
+    @param
+    signum: Signal number to handle (unused)
+*/
 void sigint_handler(int signum)
 {
     exit_flag = EXIT_CODE;
