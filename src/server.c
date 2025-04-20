@@ -892,6 +892,11 @@ static void start_listening(int server_fd, int backlog)
     printf("Listening for incoming connections...\n");
 }
 
+#if defined(__clang__)
+#else
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wanalyzer-fd-leak"
+#endif
 /*
     Accepts an incoming connection on the server socket and retrieves client information.
 
@@ -932,6 +937,10 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
     printf("Accepted a new connection from %s:%s\n\n", client_host, client_service);
     return client_fd;
 }
+#if defined(__clang__)
+#else
+    #pragma GCC diagnostic pop
+#endif
 
 /*
     Shuts down the specified socket for reading, writing, or both.
