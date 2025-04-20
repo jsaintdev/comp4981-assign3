@@ -1,5 +1,12 @@
 #include "builtin.h"
 
+/*
+    Changes the current working directory for the server
+
+    @param
+    client: Contains client input and holds the output message
+*/
+
 void process_cd(client_info *client)
 {
     const char *path = client->args;
@@ -27,6 +34,12 @@ void process_cd(client_info *client)
     snprintf(client->output, MAX_MSG_LENGTH, "Changed directory to %s\n", path);
 }
 
+/*
+    Retrieves and writes the server's current working directory
+
+    @param
+    client: Contains client input and holds the output message
+*/
 void process_pwd(client_info *client)
 {
     if(getcwd(client->output, MAX_MSG_LENGTH) != NULL)
@@ -40,6 +53,12 @@ void process_pwd(client_info *client)
     }
 }
 
+/*
+    Echoes back the provided message.
+
+    @param
+    client: Contains client input and holds the output message
+*/
 void process_echo(client_info *client)
 {
     if(*client->args == '\0')
@@ -52,6 +71,12 @@ void process_echo(client_info *client)
     }
 }
 
+/*
+    Determines if the argument is a built-in or an executable in PATH.
+
+    @param
+    client: Contains client input and holds the output message
+*/
 void process_type(client_info *client)
 {
     const char *path;
@@ -88,7 +113,8 @@ void process_type(client_info *client)
         return;
     }
 
-    path_copy = strdup(path);    // copy PATH since strtok modifies it
+    // copy PATH since strtok modifies it
+    path_copy = strdup(path);
     if(path_copy == NULL)
     {
         snprintf(client->output, MAX_MSG_LENGTH, "Error: Memory allocation failed\n");
@@ -121,6 +147,12 @@ void process_type(client_info *client)
     free(path_copy);
 }
 
+/*
+    Generates a randomized "meow" or "purr" sequence.
+
+    @param
+    client: Contains client input and holds the output message
+*/
 void process_meow(client_info *client)
 {
     // Output string buffer

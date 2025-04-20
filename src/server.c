@@ -799,7 +799,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 
     server_state = (server_data *)arg;
 
-    //printf("Cleaning up server resources...\n");
+    // printf("Cleaning up server resources...\n");
 
     // Close all active client sockets
     for(i = 0; i < MAX_CLIENTS; i++)
