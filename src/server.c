@@ -205,7 +205,7 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     // **Check for new client connections**
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
-        int assigned = 0;
+        int slot_found = 0;
 
         // Exit if exit_flag is set
         if(exit_flag)
@@ -226,15 +226,16 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
             {
                 server_state->clients[i].client_socket = new_socket;
                 memset(server_state->clients[i].msg, 0, MAX_MSG_LENGTH);
-                assigned = 1;
+                slot_found = 1;
                 break;
             }
         }
 
-        if(!assigned)
+        if(!slot_found)
         {
             fprintf(stderr, "Max clients reached, rejecting new connection.\n");
             close(new_socket);
+            new_socket = -1;
         }
     }
 
