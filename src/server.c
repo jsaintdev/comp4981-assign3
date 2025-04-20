@@ -903,6 +903,7 @@ static int socket_accept_connection(int server_fd, struct sockaddr_storage *clie
     char client_host[NI_MAXHOST];
     char client_service[NI_MAXSERV];
 
+    (void)server_fd;
     errno     = 0;
     client_fd = accept(server_fd, (struct sockaddr *)client_addr, client_addr_len);
 
