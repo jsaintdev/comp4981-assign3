@@ -573,10 +573,41 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
     }
 
     // Create a pipe
+#if defined(__linux__)
+    // Linux-specific: use pipe2 with O_CLOEXEC
     if(pipe2(pipe_fds, O_CLOEXEC) == -1)
     {
-        perror("Pipe creation failed");
-        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to execute due to pipe creation failure\n");
+        perror("pipe2 failed");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to create pipe\n");
+        return SEND_OUTPUT;
+    }
+#else
+    // macOS and other POSIX systems
+    if(pipe(pipe_fds) == -1)
+    {
+        perror("pipe failed");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to create pipe\n");
+        return SEND_OUTPUT;
+    }
+
+    // Set close-on-exec manually
+    if(fcntl(pipe_fds[0], F_SETFD, FD_CLOEXEC) == -1 || fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) == -1)
+    {
+        perror("fcntl failed");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to set pipe flags\n");
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        return SEND_OUTPUT;
+    }
+#endif
+
+    // Set FD_CLOEXEC flag manually
+    if(fcntl(pipe_fds[0], F_SETFD, FD_CLOEXEC) == -1 || fcntl(pipe_fds[1], F_SETFD, FD_CLOEXEC) == -1)
+    {
+        perror("Failed to set FD_CLOEXEC");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: Unable to set pipe flags\n");
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
         return SEND_OUTPUT;
     }
 
