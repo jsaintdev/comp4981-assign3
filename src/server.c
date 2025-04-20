@@ -129,6 +129,11 @@ free_error:
     free(error);
 
 done:
+    if(server_state.server_socket > 0)
+    {
+        close(server_state.server_socket);
+        server_state.server_socket = 0;
+    }
     return exit_code;
 }
 
