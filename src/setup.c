@@ -3,6 +3,14 @@
 static _Noreturn void usage(const char *program_name, int exit_code, const char *message);
 static in_port_t      parse_in_port_t(const char *binary_name, const char *str);
 
+/*
+    Displays the usage message and exits the program.
+
+    @param
+    program_name: Name of the executable
+    exit_code: Exit status code
+    message: Error message for the user
+*/
 static _Noreturn void usage(const char *program_name, int exit_code, const char *message)
 {
     if(message)
@@ -16,6 +24,15 @@ static _Noreturn void usage(const char *program_name, int exit_code, const char 
     exit(exit_code);
 }
 
+/*
+    Parses command-line arguments to extract the IP address and port.
+
+    @param
+    argc: Number of command-line arguments
+    argv: Array of command-line argument strings
+    ip_address: Output parameter for the IP address
+    port: Output parameter for the port
+*/
 void parse_arguments(int argc, char *argv[], char **ip_address, char **port)
 {
     int opt;
@@ -63,6 +80,15 @@ void parse_arguments(int argc, char *argv[], char **ip_address, char **port)
     *port       = argv[optind + 1];
 }
 
+/*
+    Validates the IP address and port string, converting the port to in_port_t.
+
+    @param
+    binary_name: Name of the executable
+    ip_address: IP address string
+    port_str: Port string
+    port: Output parameter for the converted port
+*/
 void handle_arguments(const char *binary_name, const char *ip_address, const char *port_str, in_port_t *port)
 {
     if(ip_address == NULL)
@@ -78,6 +104,16 @@ void handle_arguments(const char *binary_name, const char *ip_address, const cha
     *port = parse_in_port_t(binary_name, port_str);
 }
 
+/*
+    Parses a string as an in_port_t and validates its numeric range.
+
+    @param
+    binary_name: Name of the executable
+    str: String to parse
+
+    @return
+    Parsed in_port_t value
+*/
 static in_port_t parse_in_port_t(const char *binary_name, const char *str)
 {
     char     *endptr;
@@ -107,6 +143,13 @@ static in_port_t parse_in_port_t(const char *binary_name, const char *str)
     return (in_port_t)parsed_value;
 }
 
+/*
+    Converts an IPv4 or IPv6 string address into a sockaddr_storage struct.
+
+    @param
+    address: IP address as a string
+    addr: Pointer to the sockaddr_storage to populate
+*/
 void convert_address(const char *address, struct sockaddr_storage *addr)
 {
     memset(addr, 0, sizeof(*addr));
@@ -126,6 +169,17 @@ void convert_address(const char *address, struct sockaddr_storage *addr)
     }
 }
 
+/*
+    Creates a socket with the specified domain, type, and protocol.
+
+    @param
+    domain: Address family
+    type: Socket type
+    protocol: Protocol to use
+
+    @return
+    File descriptor of the new socket, exits on failure
+*/
 int socket_create(int domain, int type, int protocol)
 {
     int sockfd;
@@ -141,6 +195,14 @@ int socket_create(int domain, int type, int protocol)
     return sockfd;
 }
 
+/*
+    Binds a socket to the specified IP address and port.
+
+    @param
+    sockfd: Socket file descriptor
+    addr: Pointer to a sockaddr_storage struct with the IP address
+    port: Port number to bind to
+*/
 void socket_bind(int sockfd, struct sockaddr_storage *addr, in_port_t port)
 {
     char      addr_str[INET6_ADDRSTRLEN];
