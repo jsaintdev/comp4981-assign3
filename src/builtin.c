@@ -132,10 +132,15 @@ void process_meow(client_info *client)
     if(!seeded)
     {
         unsigned int seed;
+
+#if defined(__APPLE__) || defined(__FreeBSD__)
+        arc4random_buf(&seed, sizeof(seed));
+#else
         if(getrandom(&seed, sizeof(seed), 0) != sizeof(seed))
         {
             seed = MEANING_OF_LIFE;
         }
+#endif
         srand(seed);
 
         seeded = 1;

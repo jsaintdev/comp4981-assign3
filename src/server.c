@@ -241,7 +241,15 @@ p101_fsm_state_t wait_for_command(const struct p101_env *env, struct p101_error 
     // **Check for new client connections**
     if(FD_ISSET(server_state->server_socket, &read_fds))
     {
-        int new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
+        int new_socket;
+
+        // Exit if exit_flag is set
+        if(exit_flag)
+        {
+            return CLEANUP;
+        }
+
+        new_socket = socket_accept_connection(server_state->server_socket, &client_addr, &client_len);
         if(new_socket < 0)
         {
             perror("Accept error");
@@ -544,7 +552,7 @@ static p101_fsm_state_t execute_command(const struct p101_env *env, struct p101_
     // For cat, check if there are args
     if(client->args[0] == '\0' && strcmp(client->cmd, "cat") == 0)
     {
-        snprintf(client->output, MAX_MSG_LENGTH, "Error: 'cat' requires input or a filename\n");
+        snprintf(client->output, MAX_MSG_LENGTH, "Error: 'cat' requires input or filename\n");
         return SEND_OUTPUT;
     }
 
@@ -726,7 +734,7 @@ static p101_fsm_state_t cleanup(const struct p101_env *env, struct p101_error *e
 
     server_state = (server_data *)arg;
 
-    printf("Cleaning up server resources...\n");
+    //printf("Cleaning up server resources...\n");
 
     // Close all active client sockets
     for(i = 0; i < MAX_CLIENTS; i++)
@@ -880,7 +888,7 @@ void setup_signal_handler(void)
 void sigint_handler(int signum)
 {
     exit_flag = EXIT_CODE;
-    printf("SIGINT received. Exiting...\n");
+    printf("SIGINT received. Cleaning up...\n");
 }
 
 #pragma GCC diagnostic pop

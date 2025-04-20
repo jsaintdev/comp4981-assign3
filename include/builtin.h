@@ -9,9 +9,13 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
+#if defined(__APPLE__) || defined(__FreeBSD__)
+#include <stdlib.h>
+#else
+#include <sys/random.h>
+#endif
 
 #define PATH_LEN 1024
 #define NUM_BUILT_INS 6
