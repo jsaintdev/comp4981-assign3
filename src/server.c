@@ -393,7 +393,7 @@ static p101_fsm_state_t check_command_type(const struct p101_env *env, struct p1
     }
     else
     {
-        printf("[type] %s is external. Searching...\n", client->cmd);
+        // printf("[type] %s is external\n", client->cmd);
         next_state = SEARCH_FOR_CMD;
     }
 
@@ -501,6 +501,7 @@ static p101_fsm_state_t search_for_command(const struct p101_env *env, struct p1
     }
 
     // Command found, store it and transition to execution
+    printf("[type] %s is external at %s\n", client->cmd, command_path);
     snprintf(client->cmd_path, MAX_MSG_LENGTH, "%s", command_path);
     return EXECUTE_CMD;
 }
