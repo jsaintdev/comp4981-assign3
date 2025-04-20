@@ -94,7 +94,14 @@ int main(int argc, char *argv[])
     return EXIT_SUCCESS;
 }
 
-// Establishes a connection between the client and the server
+/*
+    Connects a socket to the specified server address and port.
+
+    @param
+    sockfd: Socket file descriptor
+    addr: Pointer to the server address structure
+    port: Port number to connect to
+*/
 static void socket_connect(int sockfd, struct sockaddr_storage *addr, in_port_t port)
 {
     char      addr_str[INET6_ADDRSTRLEN];
@@ -144,7 +151,9 @@ static void socket_connect(int sockfd, struct sockaddr_storage *addr, in_port_t 
     // printf("Connected to: %s:%u\n", addr_str, port);
 }
 
-// Sets up a signal handler so the program can terminate gracefully
+/*
+    Sets up a signal handler for graceful shutdown on SIGINT.
+*/
 static void setup_signal_handler(void)
 {
     struct sigaction sa;
@@ -163,7 +172,12 @@ static void setup_signal_handler(void)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 
-// Handles a SIGINT signal by setting a flag to signal termination
+/*
+    Handles SIGINT by setting a flag to indicate client shutdown.
+
+    @param
+    signum: The received signal number
+*/
 static void sigint_handler(int signum)
 {
     exit_flag = EXIT_CODE;
